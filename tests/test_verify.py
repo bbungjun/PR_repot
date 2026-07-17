@@ -103,6 +103,19 @@ def test_short_module_name_not_falsely_covered_by_substring_match():
     assert hit and hit[0]["status"] == WARNING
 
 
+def test_unchanged_contract_claim_text_is_narrowly_scoped():
+    # 최종 수용 검사관 지적(수정 1): 추출기가 실제로 아는 것은 "버전 상수 값과
+    # 스키마 필드 목록이 안 바뀌었다"는 사실뿐이다. 옛 문구 "저장·생성 계약이
+    # 바뀌지 않았습니다"는 validator(예: watch_time_sec >= 0 → >= 1)처럼 필드
+    # 목록·타입은 그대로인 채 의미만 바뀌는 변경까지 "계약 불변"으로 단언해
+    # 허위 보증이 된다. 문구가 검증된 사실 범위로 좁혀졌는지 고정한다.
+    claims = build_claims(_delta())
+    hit = [c for c in claims if "ACTION_LOG_SCHEMA_VERSION" in c["text"] and "불변" in c["text"]]
+    assert hit and hit[0]["status"] == VERIFIED
+    assert "저장·생성 계약이 바뀌지 않았습니다" not in hit[0]["text"]
+    assert "필드 목록" in hit[0]["text"]
+
+
 def test_schema_change_added_is_info_and_removed_is_warning():
     # §7의 세 형태에는 "필드 추가"가 없다 — breaking=False인 필드 추가도
     # version_changes와 같은 이유로 VERIFIED가 아니라 INFO여야 한다.

@@ -68,8 +68,19 @@ def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
 def build_claims(pr_delta: dict) -> list[dict]:
     claims: list[dict] = []
     for c in pr_delta["unchanged_contracts"]:
+        # 최종 수용 검사관 지적(근본 원인): 추출기가 실제로 아는 것은 "버전
+        # 상수 값과 스키마 필드 목록(이름·타입)이 안 바뀌었다"는 사실뿐이다.
+        # 옛 문구 "저장·생성 계약이 바뀌지 않았습니다"는 이보다 훨씬 넓은
+        # 보증을 단언한다 — validator 강화(예: watch_time_sec >= 0 → >= 1)처럼
+        # 필드 목록·타입은 그대로인 채 계약의 의미가 바뀌는 변경도 이 문구
+        # 아래에서는 여전히 초록으로 뜬다. schema.py의 validator를 계속 쫓아
+        # 추출 범위를 넓히는 것은 바닥이 없으므로(§7 취지), 검증된 사실
+        # 범위로 문구를 좁힌다 — "계약이 바뀌지 않았다"는 포괄 보증 대신
+        # "버전 상수 값과 필드 목록이 그대로"라는 좁고 참인 사실만 말한다.
         claims.append(_claim(
-            VERIFIED, f'{c["const"]} = "{c["value"]}" 불변 — 저장·생성 계약이 바뀌지 않았습니다',
+            VERIFIED,
+            f'{c["const"]} = "{c["value"]}" 값 불변 — 이 모듈의 버전 상수 값과 '
+            f'스키마 필드 목록(이름·타입)이 그대로입니다',
             c["module"], c.get("line")))
     for v in pr_delta["version_changes"]:
         # breaking=True는 §7 세 형태 밖이라도 "애매하면 경고" 원칙으로 WARNING.
