@@ -205,6 +205,41 @@ def test_load_report_html_rejects_overlong_repo(tmp_path):
         store.load_report_html("a" * 5000, 1)
 
 
+# --- Important: pr이 정수가 아니면 서버가 스스로 깨진 링크를 반환하는 문제 ------
+#
+# JSON Schema draft 2020-12의 "integer" 타입은 소수부가 0인 숫자(예: 3.0)도
+# 통과시킨다. pr: 3.0이 계약 검증을 통과해 json.loads로 파이썬 float 3.0이 되면,
+# 검증 없이 "pr-3.0" 디렉터리에 저장되어 API가 반환한 report_url
+# (".../reports/Autoresearch/3.0")로는 영영 도달할 수 없다(GET 라우트는 pr을
+# int로 선언). bool은 int의 서브클래스이므로 True/False도 별도로 배제해야 한다.
+
+def test_save_report_rejects_float_pr(tmp_path):
+    store = Store(tmp_path)
+    pr_delta = dict(_load("pr_delta_120.json"), pr=3.0)
+    with pytest.raises(ValueError):
+        store.save_report(pr_delta, "<html>evil</html>")
+
+
+def test_save_report_rejects_bool_pr(tmp_path):
+    store = Store(tmp_path)
+    pr_delta = dict(_load("pr_delta_120.json"), pr=True)
+    with pytest.raises(ValueError):
+        store.save_report(pr_delta, "<html>evil</html>")
+
+
+def test_load_report_html_rejects_float_pr(tmp_path):
+    store = Store(tmp_path)
+    with pytest.raises(ValueError):
+        store.load_report_html("Autoresearch", 3.0)
+
+
+def test_save_report_accepts_real_int_pr(tmp_path):
+    store = Store(tmp_path)
+    pr_delta = dict(_load("pr_delta_120.json"), pr=120)
+    store.save_report(pr_delta, "<html>ok</html>")  # 예외 없이 통과해야 한다.
+    assert store.load_report_html("Autoresearch", 120) == "<html>ok</html>"
+
+
 # 경계값. 실행으로 실측: manifest의 "latest" 파일은 "{repo}.json"으로 저장되고
 # _atomic_write_text가 그 앞에 임시 파일명(".{name}.{8자 난수}.tmp", 실측
 # 오버헤드 14바이트)을 덧붙인 뒤 mkstemp로 생성한다. 즉 repo 하나가 실제로는

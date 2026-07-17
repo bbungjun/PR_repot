@@ -314,6 +314,32 @@ def test_get_report_rejects_overlong_repo_5000_returns_400(client):
     assert res.status_code == 400
 
 
+# --- Important: pr이 정수가 아니면 200과 함께 깨진 report_url이 반환되던 문제 ---
+#
+# JSON Schema draft 2020-12의 "integer" 타입은 3.0처럼 소수부가 0인 숫자를
+# 허용한다. 수정 전에는 pr: 3.0이 계약 검증을 통과해 200과
+# "report_url": ".../reports/Autoresearch/3.0"을 반환했지만, 그 URL을 GET하면
+# 404였다(리포트는 "pr-3.0" 디렉터리에 저장되지만 API로는 도달 불가). 서버가
+# 스스로 반환한 링크가 깨지는 것은 공개 계약의 최악의 실패 모드이므로 400으로
+# 막는다.
+
+@pytest.mark.parametrize("pr_value", [3.0, True, "3"])
+def test_pr_report_rejects_non_integer_pr(client, pr_value):
+    pr_delta = dict(_load("pr_delta_120.json"), pr=pr_value)
+    body = {"architecture": _load("architecture_120.json"), "pr_delta": pr_delta}
+    assert client.post("/api/pr-report", json=body, headers=TOKEN).status_code == 400
+
+
+def test_pr_report_accepts_real_integer_pr(client):
+    # 정상 pr(정수)은 계속 200과 도달 가능한 report_url을 반환해야 한다.
+    body = {"architecture": _load("architecture_120.json"), "pr_delta": _load("pr_delta_120.json")}
+    res = client.post("/api/pr-report", json=body, headers=TOKEN)
+    assert res.status_code == 200
+    report_url = res.json()["report_url"]
+    path = report_url.replace("http://testserver", "")
+    assert client.get(path).status_code == 200
+
+
 def test_store_save_report_bug_still_returns_500(monkeypatch, tmp_path):
     def _boom(self, pr_delta, html):
         raise OSError("디스크 오류 시뮬레이션")

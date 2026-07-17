@@ -110,6 +110,17 @@ class Store:
     # --- reports ---------------------------------------------------
     def _report_dir(self, repo: str, pr: int) -> Path:
         repo = _validate_component(repo, "repo")
+        # JSON Schema draft 2020-12의 "integer" 타입은 소수부가 0인 숫자(예:
+        # 3.0)도 통과시킨다. 그래서 pr-delta 스키마가 "pr": {"type": "integer"}
+        # 여도 pr: 3.0이 계약 검증을 통과해 여기까지 도달할 수 있고, json.loads는
+        # 이를 파이썬 float 3.0으로 역직렬화한다. 이 값을 그대로 받아들이면
+        # 리포트가 "pr-3.0" 디렉터리에 저장되는데, API가 반환하는 report_url과
+        # GET /reports/{repo}/{pr}(파라미터를 int로 선언)은 둘 다 정수 형식을
+        # 기대하므로 "3.0"에 영영 도달하지 못한다 — 서버가 스스로 반환한 링크가
+        # 깨지는 최악의 실패 모드. bool은 int의 서브클래스라 isinstance(pr, int)
+        # 만으로는 True/False가 통과해버리므로 별도로 배제한다.
+        if isinstance(pr, bool) or not isinstance(pr, int):
+            raise ValueError(f"pr은 정수여야 합니다(실제 {pr!r})")
         pr = _validate_component(pr, "pr")
         return self._safe_path("reports", repo, f"pr-{pr}")
 
