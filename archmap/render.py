@@ -5,9 +5,34 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from archmap.verify import build_claims
+from archmap.verify import NARRATED, VERIFIED, WARNING, build_claims
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
+
+# status -> 한국어 라벨의 명시적 매핑. 예전 템플릿은 status == "verified"가
+# 아니면 전부 "주의"로 표시했는데, verify.py에는 이미 NARRATED 상수가
+# 선언되어 있어(Phase 2의 GLM 서술 claim용) 그 관습이 그대로였다면 서술을
+# 경고로 오표기했을 것이다. 매핑을 코드로 명시하고, 아래 render_report에서
+# 매핑에 없는 status를 만나면 조용히 "주의"로 넘기지 않고 렌더를 실패시켜
+# 이 불변식을 구조적으로 강제한다.
+#
+# 핵심 불변식: narrated는 절대 "검증됨"으로 표시되지 않는다 — verified 배지는
+# archmap/verify.py의 build_claims만 부여하고(pr-delta 사실 기반), 렌더러는
+# 그 status를 표시만 한다.
+STATUS_LABELS = {
+    VERIFIED: "검증됨",
+    WARNING: "주의",
+    NARRATED: "서술",
+}
+
+
+class UnknownClaimStatusError(ValueError):
+    """claim의 status가 STATUS_LABELS에 없을 때 던진다.
+
+    status 종류가 늘어날 때(예: Phase 2의 "narrated") 이 매핑을 갱신하지
+    않으면 예전에는 조용히 "주의"로 뭉뚱그려졌다. 그 대신 여기서 렌더를
+    실패시켜, 새 status를 매핑에 등록하는 일을 선택이 아니라 필수로 만든다.
+    """
 # select_autoescape(["html"])는 템플릿 파일명이 ".html"로 끝나는지만 검사한다.
 # 실제 템플릿 파일명은 "pr_report.html.j2"로 ".j2"로 끝나 판정이 항상 False가
 # 되어 autoescape가 꺼진 채로 렌더링되었다(HTML 인젝션 가능). 이 렌더러는
@@ -27,6 +52,9 @@ def render_report(architecture: dict, pr_delta: dict) -> str:
 
     claims = build_claims(pr_delta)
     for c in claims:
+        if c["status"] not in STATUS_LABELS:
+            raise UnknownClaimStatusError(f"알 수 없는 claim status입니다: {c['status']!r}")
+        c["status_label"] = STATUS_LABELS[c["status"]]
         path = path_by_module.get(c["module"]) if c["module"] else None
         if repo_url and path:
             c["anchor"] = anchor_url(repo_url, sha, path, c["line"])

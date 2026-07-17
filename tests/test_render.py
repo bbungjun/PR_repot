@@ -2,7 +2,10 @@ import copy
 import json
 from pathlib import Path
 
-from archmap.render import anchor_url, render_report
+import pytest
+
+from archmap.render import UnknownClaimStatusError, anchor_url, render_report
+from archmap.verify import NARRATED
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -63,6 +66,38 @@ def test_changed_module_anchor_omitted_without_repo_url():
 
     assert 'href="/blob/' not in html
     assert "autoresearch/action_logs/daily.py" in html  # 경로 텍스트는 그대로 노출
+
+
+# --- Minor: status->라벨 매핑을 명시적으로, 미지의 status는 렌더 실패 ---------
+#
+# 예전 템플릿은 status == "verified"가 아니면 전부 "주의"로 표시했다.
+# verify.py에는 이미 NARRATED 상수가 선언되어 있어(Phase 2의 GLM 서술 claim용)
+# 그 관습이 그대로였다면 서술이 경고로 오표기됐을 것이다. render.py의
+# STATUS_LABELS 매핑과, 매핑에 없는 status를 만나면 렌더를 실패시키는 검사를
+# 회귀 테스트로 고정한다.
+
+def _render_with_claims(monkeypatch, claims):
+    import archmap.render as render_module
+    monkeypatch.setattr(render_module, "build_claims", lambda pr_delta: claims)
+    return render_report(_load("architecture_120.json"), _load("pr_delta_120.json"))
+
+
+def test_unknown_claim_status_fails_render(monkeypatch):
+    bogus_claim = {"status": "bogus", "text": "정체불명 주장", "module": None, "line": None}
+    with pytest.raises(UnknownClaimStatusError):
+        _render_with_claims(monkeypatch, [bogus_claim])
+
+
+def test_narrated_status_renders_as_narration_label_not_verified(monkeypatch):
+    narrated_claim = {"status": NARRATED, "text": "GLM 서술 예시", "module": None, "line": None}
+    html = _render_with_claims(monkeypatch, [narrated_claim])
+
+    assert 'class="claim narrated"' in html
+    assert 'class="badge badge-narrated"' in html
+    assert "서술" in html
+    # 핵심 불변식: narrated는 절대 검증됨으로 표시되면 안 된다.
+    assert 'class="badge badge-verified"' not in html
+    assert "검증됨" not in html
 
 
 # --- Minor: 빈 섹션이 "깨진 리포트"로 보이지 않게 명시적 안내를 표시한다 ------
