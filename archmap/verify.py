@@ -17,10 +17,15 @@ def _claim(status: str, text: str, module: str | None = None, line: int | None =
 def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
     # 모듈 id의 마지막 구성요소만 대조한다 — 패키지명 대조는 같은 패키지의
     # 무관한 테스트 변경을 "커버됨"으로 오판한다(허위 초록 금지).
+    # 대조는 부분 문자열이 아니라 단어 경계(토큰) 완전 일치로 한다: stem을
+    # "_" 기준으로 토큰화해 mod_name이 그 토큰 중 하나와 정확히 같을 때만
+    # 커버된 것으로 본다. 부분 문자열 대조("log" in "action_logs_daily")는
+    # 짧은 모듈명이 무관한 테스트 파일명에 우연히 포함되는 경우까지 커버됨으로
+    # 오판해 허위 초록을 만든다.
     mod_name = module_id.rsplit(".", 1)[-1]
     for f in test_files:
         stem = f.rsplit("/", 1)[-1].removeprefix("test_").removesuffix(".py")
-        if mod_name in stem:
+        if mod_name in stem.split("_"):
             return True
     return False
 
