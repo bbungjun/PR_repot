@@ -279,6 +279,69 @@ def test_src_features_feature_builder_covered_by_singular_feature_test():
     assert hit["status"] == VERIFIED
 
 
+def test_jobs_action_log_not_falsely_covered_by_sibling_quality_test():
+    # 최종 수용 검사관 지적(이번 수정의 핵심 대상): "jobs.action_log"(mod 토큰
+    # [action, log])의 토큰열이 형제 모듈 "jobs.action_log_quality"의 토큰열의
+    # 접두라서, 형제 모듈의 테스트 test_action_log_quality_job.py(진짜 대응
+    # 테스트 test_action_log_job.py는 미변경)만으로도 mod 연속 부분열 매칭과
+    # 패키지 토큰 {job} 부분집합 검사를 모두 통과해 "커버됨" 오판을 냈다.
+    # stem에서 mod·패키지 토큰을 제거하면 "quality"가 잔여로 남아야 탈락한다.
+    hit = _module_claim_for(
+        "jobs.action_log", "autoresearch/jobs/action_log.py", "orchestration",
+        "tests/test_action_log_quality_job.py")
+    assert hit["status"] == WARNING
+
+
+def test_jobs_action_log_quality_still_covered_by_own_test_after_leftover_fix():
+    # 위 수정의 반대 방향 회귀 방지: "jobs.action_log_quality" 자신의 테스트
+    # test_action_log_quality_job.py와는 여전히 매칭되어야 한다(mod 토큰 3개가
+    # stem을 모두 소비하고 남은 "job"을 패키지 토큰이 소비해 잔여가 없다).
+    hit = _module_claim_for(
+        "jobs.action_log_quality", "autoresearch/jobs/action_log_quality.py", "orchestration",
+        "tests/test_action_log_quality_job.py")
+    assert hit["status"] == VERIFIED
+
+
+def test_jobs_action_log_still_covered_by_its_own_real_test():
+    # 회귀 방지: jobs.action_log의 진짜 대응 테스트 test_action_log_job.py와는
+    # (형제 quality 테스트가 섞여 있어도) 여전히 매칭되어야 한다.
+    hit = _module_claim_for(
+        "jobs.action_log", "autoresearch/jobs/action_log.py", "orchestration",
+        "tests/test_action_log_job.py")
+    assert hit["status"] == VERIFIED
+
+
+def test_build_claims_sibling_prefix_false_positive_end_to_end():
+    # 최종 수용 검사관 재현(★ 자기 검증 — 반드시 검사관 원본 재현 그대로 실행):
+    # jobs.action_log의 public 표면이 바뀌었는데 PR이 형제 job인
+    # test_action_log_quality_job.py만 건드리고 진짜 대응 test_action_log_job.py는
+    # 손대지 않은 상황을 build_claims 층위에서 그대로 재현한다. jobs.action_log
+    # 배지는 verified가 아니라 warning("테스트 없음")이어야 한다.
+    d = _delta()
+    d["changed_modules"] = [{
+        "id": "jobs.action_log",
+        "path": "autoresearch/jobs/action_log.py",
+        "stage": "orchestration",
+        "symbols_changed": [{"name": "run_action_log_job", "change": "signature", "line": 1}],
+        "public_surface_changed": True,
+    }]
+    d["tests"]["files"] = ["tests/test_action_log_quality_job.py"]
+    claims = build_claims(d)
+    hit = [c for c in claims if c["module"] == "jobs.action_log" and "테스트" in c["text"]]
+    assert hit and hit[0]["status"] == WARNING
+    assert hit[0]["status"] != VERIFIED
+    assert "대응 테스트 변경이 없습니다" in hit[0]["text"]
+
+    # 동시에: 같은 PR이 진짜 대응 테스트 test_action_log_job.py를 건드리면
+    # verified가 나와야 한다(안전 방향 과탐이 아님을 함께 확인).
+    d2 = _delta()
+    d2["changed_modules"] = d["changed_modules"]
+    d2["tests"]["files"] = ["tests/test_action_log_job.py"]
+    claims2 = build_claims(d2)
+    hit2 = [c for c in claims2 if c["module"] == "jobs.action_log" and "테스트" in c["text"]]
+    assert hit2 and hit2[0]["status"] == VERIFIED
+
+
 def test_schema_change_status_depends_only_on_breaking_flag_not_change_value():
     # schema_changes 판정은 change 값("added"/"removed")이 아니라 오직 breaking
     # 플래그에만 의존해야 한다. added+breaking=True는 warning, removed+breaking=False는

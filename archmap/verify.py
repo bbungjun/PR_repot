@@ -31,7 +31,7 @@ def _singularize(token: str) -> str:
 
 
 def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
-    # 이 판정은 이미 네 번 고쳐졌고, 매번 반대 방향 회귀를 냈다:
+    # 이 판정은 이미 다섯 번 고쳐졌고, 매번 반대 방향 회귀나 새 오매칭을 냈다:
     #   1) 부분 문자열 대조("log" in "action_logs_daily") → 짧은 모듈명이 무관한
     #      테스트 파일명에 우연히 포함되어 허위 초록.
     #   2) 단일 토큰 완전 일치(mod_name in stem.split("_")) → "llm_generator"처럼
@@ -73,6 +73,24 @@ def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
     #       충분히 통과한다.
     # 패키지 구성요소가 없는(점이 없는) 최상위 모듈 id는 (b)를 건너뛰고 (a)만으로
     # 판정한다 — 대조할 패키지명 자체가 없다.
+    #
+    # 5) (위 (a)(b) 적용 후) 동일 패키지 접두 충돌 — 최종 수용 검사관 지적:
+    #    "jobs.action_log"(mod 토큰 [action, log])는 "jobs.action_log_quality"의
+    #    토큰열의 접두이므로, 형제 모듈의 테스트 파일
+    #    "test_action_log_quality_job.py"(stem [action, log, quality, job])에서도
+    #    mod 연속 부분열 매칭이 성립하고 패키지 토큰 {job}도 부분집합이라 통과해
+    #    버린다 — 진짜 대응 테스트 test_action_log_job.py는 미변경인데 형제
+    #    모듈의 테스트만으로 "커버됨" 오판(허위 초록). 그래서 (c) 잔여 토큰
+    #    검사를 추가한다: mod 매칭 구간을 stem에서 제거하고, 남은 토큰에서
+    #    패키지 토큰(정규화 후, 존재하는 만큼만)을 하나씩 제거했을 때 아무것도
+    #    안 남아야 통과다. "test_action_log_quality_job" → mod 구간 [action,log]
+    #    제거 → [quality, job] → pkg "job" 제거 → 잔여 [quality] → 탈락.
+    #    "test_action_log_job" → mod 구간 제거 → [job] → pkg "job" 제거 → 잔여
+    #    없음 → 통과. "action_log_quality" 모듈 자신의 테스트는 mod 토큰 3개가
+    #    stem 전체([action,log,quality,job])에서 [action,log,quality] 구간을
+    #    소비하고 남은 [job]을 pkg "job"이 소비해 잔여 없음 → 통과 유지.
+    #    패키지가 없는(점 없는) 최상위 모듈은 이 잔여 검사 대상이 아니다(대조할
+    #    패키지 토큰 자체가 없어 기존처럼 mod 매칭만으로 판정).
     parts = module_id.split(".")
     mod_tokens = parts[-1].split("_")
     pkg_tokens = {_singularize(tok) for tok in parts[-2].split("_")} if len(parts) > 1 else set()
@@ -80,15 +98,22 @@ def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
     for f in test_files:
         stem = f.rsplit("/", 1)[-1].removeprefix("test_").removesuffix(".py")
         stem_tokens = stem.split("_")
-        mod_matched = any(
-            stem_tokens[i:i + n] == mod_tokens for i in range(len(stem_tokens) - n + 1))
-        if not mod_matched:
-            continue
         if not pkg_tokens:
-            return True
+            if any(stem_tokens[i:i + n] == mod_tokens for i in range(len(stem_tokens) - n + 1)):
+                return True
+            continue
         normalized_stem_tokens = {_singularize(tok) for tok in stem_tokens}
-        if pkg_tokens <= normalized_stem_tokens:
-            return True
+        if not (pkg_tokens <= normalized_stem_tokens):
+            continue
+        for i in range(len(stem_tokens) - n + 1):
+            if stem_tokens[i:i + n] != mod_tokens:
+                continue
+            leftover = [_singularize(tok) for tok in stem_tokens[:i] + stem_tokens[i + n:]]
+            for pt in pkg_tokens:
+                if pt in leftover:
+                    leftover.remove(pt)
+            if not leftover:
+                return True
     return False
 
 
