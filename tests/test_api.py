@@ -2,9 +2,10 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from archmap.api import create_app
+from archmap.api import _check_token, create_app
 
 FIXTURES = Path(__file__).parent / "fixtures"
 TOKEN = {"X-Archmap-Token": "test-token"}
@@ -133,3 +134,76 @@ def test_validation_error_detail_excludes_full_schema(client):
     detail = res.json()["detail"]
     assert "$schema" not in detail
     assert "changed_modules" in detail
+
+
+# --- Critical 1(재리뷰): 비-UTF8 바이트 바디는 400이어야 한다 ---
+#
+# request.json()은 내부적으로 json.loads(body)를 호출하는데, body가 유효한
+# UTF-8이 아니면 UnicodeDecodeError를 던진다. 이는 json.JSONDecodeError의
+# 서브클래스가 아닌 별개 예외라 기존 except 절에 걸리지 않고 그대로 500으로
+# 유출됐었다.
+#
+# 주의: b"\xff\xfe..."처럼 UTF-16 BOM으로 시작하는 바이트열은 json.loads가
+# UTF-16으로 재해석해버려(json.detect_encoding) UnicodeDecodeError가 아니라
+# JSONDecodeError만 발생시킨다(우연히 400이 나서 이 결함을 가림). BOM이 아니고
+# 길이가 4바이트 이상도 아닌 순수 잘못된 UTF-8 시작 바이트를 써야 실제
+# UnicodeDecodeError가 재현된다.
+
+NON_UTF8_BODY = b"\x80\x81\x82"
+
+
+def test_pr_report_rejects_non_utf8_body(client):
+    res = client.post("/api/pr-report", content=NON_UTF8_BODY, headers=TOKEN)
+    assert res.status_code == 400
+
+
+def test_manifest_rejects_non_utf8_body(client):
+    res = client.post("/api/manifest", content=NON_UTF8_BODY, headers=TOKEN)
+    assert res.status_code == 400
+
+
+# --- Critical 2(재리뷰): 비-ASCII 토큰 헤더는 401이어야 한다 ---
+#
+# Starlette는 헤더 값을 latin-1로 디코딩하므로, 상위 바이트(0x80 이상)가 든
+# 원시 헤더도 성공적으로 디코딩되어 non-ASCII 문자가 든 str이 된다. 이를
+# hmac.compare_digest(provided, expected)에 그대로 넘기면
+# "comparing strings with non-ASCII characters is not supported" TypeError가
+# 나며 500으로 유출됐었다.
+#
+# httpx의 Python 클라이언트 API(headers=dict[str, str])는 str 헤더를 ASCII로만
+# 인코딩하려 해서 이 케이스를 가리므로, raw byte 헤더 튜플로 직접 요청을
+# 구성해야 재현된다.
+
+NON_ASCII_TOKEN_HEADERS = [(b"X-Archmap-Token", b"\xf6\xe9\xe8\xe0")]
+
+
+def test_manifest_rejects_non_ascii_token_header(client):
+    request = client.build_request(
+        "POST",
+        "/api/manifest",
+        json=_load("architecture_120.json"),
+        headers=NON_ASCII_TOKEN_HEADERS,
+    )
+    res = client.send(request)
+    assert res.status_code == 401
+
+
+def test_check_token_rejects_non_ascii_token_directly():
+    # 위 e2e 테스트가 httpx/starlette 내부 동작 변경에 영향받을 수 있으므로,
+    # _check_token을 직접 호출하는 단위 테스트로도 동일한 결함을 커버한다.
+    import os
+
+    os.environ["ARCHMAP_TOKEN"] = "test-token"
+    try:
+        from starlette.requests import Request as StarletteRequest
+
+        scope = {
+            "type": "http",
+            "headers": [(b"x-archmap-token", b"\xf6\xe9\xe8\xe0")],
+        }
+        req = StarletteRequest(scope)
+        with pytest.raises(HTTPException) as exc_info:
+            _check_token(req)
+        assert exc_info.value.status_code == 401
+    finally:
+        os.environ.pop("ARCHMAP_TOKEN", None)

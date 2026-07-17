@@ -26,7 +26,17 @@ def _check_token(request: Request) -> None:
     # hmac.compare_digest에 넘기기 전에 반드시 걸러낸다(넘기면 TypeError).
     # 토큰은 CI-서버 공유 시크릿이므로 타이밍 사이드채널을 막기 위해
     # 상수 시간 비교를 사용한다.
-    if not expected or provided is None or not hmac.compare_digest(provided, expected):
+    #
+    # Starlette는 헤더 값을 latin-1로 디코딩하므로, 상위 바이트(0x80 이상)가
+    # 든 원시 헤더도 디코딩에 성공해 non-ASCII 문자가 든 str이 될 수 있다.
+    # hmac.compare_digest는 non-ASCII str 비교를 지원하지 않아 TypeError를
+    # 던지므로, 비교 전에 양쪽을 바이트로 인코딩해 상수 시간 비교 성질을
+    # 유지한 채 이 경우도 정상적으로 401로 처리되게 한다.
+    if not expected or provided is None:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다")
+    provided_bytes = provided.encode("utf-8", "surrogateescape")
+    expected_bytes = expected.encode("utf-8")
+    if not hmac.compare_digest(provided_bytes, expected_bytes):
         raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다")
 
 
@@ -39,7 +49,11 @@ async def _read_json_object(request: Request) -> dict:
     """
     try:
         body = await request.json()
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        # request.json()은 내부적으로 json.loads(body)를 호출하며, body가
+        # 유효한 UTF-8이 아니면 UnicodeDecodeError를 던진다. 이는
+        # JSONDecodeError의 서브클래스가 아닌 별개 예외(공통 조상은
+        # ValueError)이므로 함께 잡아 400으로 처리한다.
         raise HTTPException(status_code=400, detail=f"잘못된 JSON입니다: {exc}") from exc
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="요청 본문은 JSON 객체여야 합니다")
