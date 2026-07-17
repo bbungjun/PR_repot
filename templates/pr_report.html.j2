@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>PR #{{ pr_delta.pr }} · 이해 리포트</title>
+<style>
+  body { font-family: 'Segoe UI', 'Malgun Gothic', sans-serif; max-width: 960px;
+         margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
+  h1 { font-size: 1.3rem; } h2 { font-size: 1.05rem; margin-top: 2rem;
+       border-bottom: 2px solid #eee; padding-bottom: .3rem; }
+  .flow { display: flex; gap: .5rem; flex-wrap: wrap; margin: 1rem 0; }
+  .stage { padding: .4rem .8rem; border-radius: 6px; background: #f0f0f5; color: #888; }
+  .stage.hit { background: #2d6cdf; color: #fff; font-weight: 600; }
+  .claim { display: flex; gap: .6rem; align-items: baseline; padding: .45rem .6rem;
+           border-radius: 6px; margin: .3rem 0; }
+  .claim.verified { background: #e8f5ec; } .claim.warning { background: #fdeaea; }
+  .badge { font-size: .75rem; padding: .1rem .5rem; border-radius: 999px; white-space: nowrap; }
+  .badge-verified { background: #1f8a4c; color: #fff; }
+  .badge-warning  { background: #c53030; color: #fff; }
+  .anchor { font-size: .8rem; color: #2d6cdf; text-decoration: none; margin-left: auto; }
+  .narration-slot { background: #f4f4f7; color: #777; border: 1px dashed #ccc;
+                    border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  td, th { border: 1px solid #e5e5ee; padding: .4rem .6rem; text-align: left; }
+  .meta { color: #666; font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>PR #{{ pr_delta.pr }}{% if pr_delta.issue %} · {{ pr_delta.issue.title }}{% endif %}</h1>
+<p class="meta">{{ pr_delta.repo }} · {{ pr_delta.base_sha[:7] }} → {{ pr_delta.head_sha[:7] }}
+{% if pr_delta.issue %} · 이슈 #{{ pr_delta.issue.number }}{% endif %}</p>
+
+<h2>어디에 · 흐름 위치</h2>
+<div class="flow">
+{% for stage in architecture.stages %}
+  <span class="stage{% if stage in hit_stages %} hit{% endif %}">{{ stage }}</span>{% if not loop.last %}<span>→</span>{% endif %}
+{% endfor %}
+</div>
+
+<h2>계약 &amp; 영향 (검증은 렌더러가 pr-delta 사실로만 부여)</h2>
+{% for c in claims %}
+<div class="claim {{ c.status }}">
+  <span class="badge badge-{{ c.status }}">{{ "검증됨" if c.status == "verified" else "주의" }}</span>
+  <span>{{ c.text }}</span>
+  {% if c.anchor %}<a class="anchor" href="{{ c.anchor }}">⚓ {{ c.anchor_label }}</a>{% endif %}
+</div>
+{% endfor %}
+
+<h2>무엇을 · 변경 모듈</h2>
+<table>
+<tr><th>모듈</th><th>스테이지</th><th>public 표면</th><th>변경 심볼</th><th>앵커</th></tr>
+{% for m in changed_modules %}
+<tr>
+  <td>{{ m.id }}</td><td>{{ m.stage }}</td>
+  <td>{{ "변경" if m.public_surface_changed else "유지" }}</td>
+  <td>{% for s in m.symbols_changed %}{{ s.name }}({{ s.change }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
+  <td><a class="anchor" href="{{ m.anchor }}">⚓ {{ m.path }}</a></td>
+</tr>
+{% endfor %}
+</table>
+
+<h2>테스트</h2>
+<p>{{ pr_delta.tests.files | length }}개 파일 변경, +{{ pr_delta.tests.lines_added }}줄:
+{% for f in pr_delta.tests.files %}<code>{{ f }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+
+<h2>왜 (서술)</h2>
+<div class="narration-slot">
+  서술 슬롯 — Phase 2에서 GLM이 이슈·diff 기반 "무엇을/왜"를 채웁니다.
+  {% if pr_delta.issue %}현재는 이슈 발췌만 표시합니다: “{{ pr_delta.issue.body_excerpt }}”{% endif %}
+</div>
+</body>
+</html>
