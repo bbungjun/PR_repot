@@ -31,6 +31,23 @@ def test_report_contains_facts_and_anchors():
     assert 'badge badge-warning' not in html   # CSS 클래스 정의가 아니라 렌더된 배지를 검사
 
 
+def test_nonbreaking_version_change_renders_as_info_not_verified():
+    # Critical B 회귀 방지: §7이 VERIFIED를 인가하는 형태는 "계약/스키마 불변" ·
+    # "하위호환" · "테스트 커버됨" 세 가지뿐이다. 원본 픽스처의 PROMPT_VERSION
+    # bump(breaking=False)는 이 셋에 속하지 않으므로 초록(verified) 배지가
+    # 아니라 중립(info) 배지로 렌더되어야 한다. verified 배지 개수는 §7이
+    # 인가한 세 형태(불변 1 + cross_repo 하위호환 1 + 테스트 커버 모듈 2개)인
+    # 4개로 고정되어야 한다 — INFO 도입으로 그 수가 늘어나면 안 된다.
+    html = render_report(_load("architecture_120.json"), _load("pr_delta_120.json"))
+
+    assert 'class="claim info"' in html
+    assert 'class="badge badge-info"' in html
+    assert "정보" in html
+    assert "action_log_ctr_v4" in html
+    assert html.count('class="badge badge-verified"') == 4
+    assert html.count('class="badge badge-info"') == 1
+
+
 def test_flow_strip_highlights_hit_stages():
     html = render_report(_load("architecture_120.json"), _load("pr_delta_120.json"))
     assert 'class="stage hit">action_logs' in html

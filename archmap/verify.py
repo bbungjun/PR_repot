@@ -8,6 +8,14 @@ from __future__ import annotations
 VERIFIED = "verified"
 WARNING = "warning"
 NARRATED = "narrated"
+# 스펙 §7은 VERIFIED(초록)를 "X 계약/스키마 불변", "하위호환", "테스트 커버됨"
+# 세 형태에만 인가한다. 버전 상수 bump(breaking=False)나 스키마 필드 추가는 이
+# 세 형태 중 어디에도 속하지 않는다 — extractor의 breaking 플래그는 §8 규칙으로
+# 실제 판정된 적이 없어(값 변경 시 하드코딩 False) 이를 VERIFIED로 표기하면
+# "이 변경은 안전하다"는 근거 없는 보증이 된다(Critical B). 그렇다고 매 bump마다
+# WARNING을 띄우면 "애매하면 경고"가 노이즈로 퇴색한다. INFO는 초록도 경고도
+# 아닌 중립 사실 표기 — 리뷰어에게 사실은 보여주되 안전을 보증하지 않는다.
+INFO = "info"
 
 
 def _claim(status: str, text: str, module: str | None = None, line: int | None = None) -> dict:
@@ -43,13 +51,18 @@ def build_claims(pr_delta: dict) -> list[dict]:
             VERIFIED, f'{c["const"]} = "{c["value"]}" 불변 — 저장·생성 계약이 바뀌지 않았습니다',
             c["module"], c.get("line")))
     for v in pr_delta["version_changes"]:
-        status = WARNING if v["breaking"] else VERIFIED
+        # breaking=True는 §7 세 형태 밖이라도 "애매하면 경고" 원칙으로 WARNING.
+        # breaking=False는 VERIFIED를 인가받지 못했으므로(§7) INFO — 사실은
+        # 보여주되 "안전하다"는 보증은 하지 않는다.
+        status = WARNING if v["breaking"] else INFO
         label = "파괴적 변경" if v["breaking"] else "비파괴 변경"
         claims.append(_claim(
             status, f'{v["const"]}: {v["from"]} → {v["to"]} ({label})',
             v["module"], v.get("line")))
     for s in pr_delta["schema_changes"]:
-        status = WARNING if s["breaking"] else VERIFIED
+        # §7의 세 형태에 "필드 추가"는 없다 — breaking=False인 필드 추가도
+        # version_changes와 동일한 이유로 VERIFIED가 아니라 INFO.
+        status = WARNING if s["breaking"] else INFO
         kind = {"added": "필드 추가", "removed": "필드 제거"}[s["change"]]
         claims.append(_claim(status, f'{s["model"]}.{s["field"]} {kind}', s["module"]))
     for x in pr_delta["cross_repo"]:

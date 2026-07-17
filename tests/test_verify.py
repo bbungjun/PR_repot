@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from archmap.verify import NARRATED, VERIFIED, WARNING, build_claims
+from archmap.verify import INFO, NARRATED, VERIFIED, WARNING, build_claims
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -17,10 +17,21 @@ def test_unchanged_contract_is_verified():
     assert hit[0]["module"] == "action_logs.schema" and hit[0]["line"] == 16
 
 
-def test_nonbreaking_version_change_is_verified():
+def test_nonbreaking_version_change_is_not_verified():
+    # Critical B 회귀 재현: 스펙 §7이 VERIFIED를 인가하는 형태는 "X 계약/스키마
+    # 불변", "하위호환", "테스트 커버됨" 세 가지뿐이다. 버전 상수 bump는
+    # breaking=False라도 이 세 형태 중 어디에도 속하지 않는다 — extractor의
+    # breaking 플래그는 §8 규칙으로 실제 판정된 적이 없어(값 변경 시 하드코딩
+    # False) "비파괴 변경"이라는 초록 배지가 근거 없는 안전 보증이 된다.
     claims = build_claims(_delta())
     hit = [c for c in claims if "PROMPT_VERSION" in c["text"]]
-    assert hit and hit[0]["status"] == VERIFIED and "action_log_ctr_v4" in hit[0]["text"]
+    assert hit and hit[0]["status"] != VERIFIED
+
+
+def test_nonbreaking_version_change_is_info():
+    claims = build_claims(_delta())
+    hit = [c for c in claims if "PROMPT_VERSION" in c["text"]]
+    assert hit and hit[0]["status"] == INFO and "action_log_ctr_v4" in hit[0]["text"]
 
 
 def test_breaking_version_change_is_warning():
@@ -39,6 +50,14 @@ def test_tests_covered_module_verified_and_uncovered_warned():
     llm = [c for c in claims if c["module"] == "action_logs.llm_generator" and "테스트" in c["text"]]
     assert daily[0]["status"] == VERIFIED
     assert llm[0]["status"] == WARNING
+
+
+def test_nonbreaking_cross_repo_is_verified():
+    # §7이 인가한 세 형태 중 "하위호환" 회귀 방지: cross_repo breaking=False는
+    # 여전히 VERIFIED여야 한다(원본 픽스처가 이미 이 형태).
+    claims = build_claims(_delta())
+    hit = [c for c in claims if "batch-contract-v1" in c["text"] and "하위호환" in c["text"]]
+    assert hit and hit[0]["status"] == VERIFIED
 
 
 def test_breaking_cross_repo_is_warning():
@@ -84,7 +103,9 @@ def test_short_module_name_not_falsely_covered_by_substring_match():
     assert hit and hit[0]["status"] == WARNING
 
 
-def test_schema_change_added_verified_and_removed_warning():
+def test_schema_change_added_is_info_and_removed_is_warning():
+    # §7의 세 형태에는 "필드 추가"가 없다 — breaking=False인 필드 추가도
+    # version_changes와 같은 이유로 VERIFIED가 아니라 INFO여야 한다.
     d = _delta()
     d["schema_changes"] = [
         {"model": "ActionLog", "field": "retry_count", "change": "added",
@@ -95,7 +116,7 @@ def test_schema_change_added_verified_and_removed_warning():
     claims = build_claims(d)
     added = [c for c in claims if "retry_count" in c["text"]]
     removed = [c for c in claims if "legacy_id" in c["text"]]
-    assert added and added[0]["status"] == VERIFIED and "필드 추가" in added[0]["text"]
+    assert added and added[0]["status"] == INFO and "필드 추가" in added[0]["text"]
     assert removed and removed[0]["status"] == WARNING and "필드 제거" in removed[0]["text"]
 
 
@@ -163,5 +184,5 @@ def test_schema_change_status_depends_only_on_breaking_flag_not_change_value():
     added_breaking = [c for c in claims if "risky_new_field" in c["text"]]
     removed_nonbreaking = [c for c in claims if "safe_removed_field" in c["text"]]
     assert added_breaking and added_breaking[0]["status"] == WARNING and "필드 추가" in added_breaking[0]["text"]
-    assert removed_nonbreaking and removed_nonbreaking[0]["status"] == VERIFIED \
+    assert removed_nonbreaking and removed_nonbreaking[0]["status"] == INFO \
         and "필드 제거" in removed_nonbreaking[0]["text"]

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from archmap.verify import NARRATED, VERIFIED, WARNING, build_claims
+from archmap.verify import INFO, NARRATED, VERIFIED, WARNING, build_claims
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -19,10 +19,18 @@ _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 # 핵심 불변식: narrated는 절대 "검증됨"으로 표시되지 않는다 — verified 배지는
 # archmap/verify.py의 build_claims만 부여하고(pr-delta 사실 기반), 렌더러는
 # 그 status를 표시만 한다.
+#
+# INFO("정보")는 Critical B 수정으로 추가됐다: 스펙 §7이 VERIFIED를 인가하는
+# 형태는 "계약/스키마 불변" · "하위호환" · "테스트 커버됨" 세 가지뿐이라,
+# 버전 상수 bump(breaking=False)나 스키마 필드 추가처럼 그 셋에 속하지 않는
+# 사실은 초록으로 표시하면 안 된다. INFO는 초록도 경고도 아닌 중립 사실
+# 표기이며, CSS(templates/pr_report.html.j2)에서 반드시 verified와 다른
+# 색으로 렌더되어야 한다.
 STATUS_LABELS = {
     VERIFIED: "검증됨",
     WARNING: "주의",
     NARRATED: "서술",
+    INFO: "정보",
 }
 
 
