@@ -273,6 +273,47 @@ def test_render_report_bug_still_returns_500(monkeypatch, tmp_path):
     assert res.status_code == 500
 
 
+# --- Critical: 길이 제한 없는 화이트리스트가 500으로 유출되는 문제 ------------
+#
+# archmap/storage.py의 _validate_component가 문자 "종류"만 검사하고 "길이"는
+# 검사하지 않아, 문자는 안전하지만 파일시스템 컴포넌트 한도를 넘는 값이
+# 검증을 통과한 뒤 Path.resolve()/exists()나 tempfile.mkstemp에서
+# OSError(Errno 36, "File name too long")를 던지고 500으로 유출됐다. 아래
+# 네 가지는 재리뷰가 실행으로 재현한 시나리오를 그대로 회귀 테스트로 옮긴
+# 것이다(수정 전 실행 결과는 태스크 보고서에 기록).
+
+def test_pr_report_rejects_overlong_repo_returns_400(client):
+    pr_delta = dict(_load("pr_delta_120.json"), repo="a" * 255)
+    body = {"architecture": _load("architecture_120.json"), "pr_delta": pr_delta}
+    res = client.post("/api/pr-report", json=body, headers=TOKEN)
+    assert res.status_code == 400
+
+
+def test_manifest_rejects_overlong_repo_returns_400(client):
+    arch = dict(_load("architecture_120.json"), repo="a" * 255)
+    res = client.post("/api/manifest", json=arch, headers=TOKEN)
+    assert res.status_code == 400
+
+
+def test_pr_report_rejects_overlong_repo_5000_returns_400(client):
+    pr_delta = dict(_load("pr_delta_120.json"), repo="a" * 5000)
+    body = {"architecture": _load("architecture_120.json"), "pr_delta": pr_delta}
+    res = client.post("/api/pr-report", json=body, headers=TOKEN)
+    assert res.status_code == 400
+
+
+def test_pr_report_rejects_overlong_head_sha_returns_400(client):
+    pr_delta = dict(_load("pr_delta_120.json"), head_sha="a" * 5000)
+    body = {"architecture": _load("architecture_120.json"), "pr_delta": pr_delta}
+    res = client.post("/api/pr-report", json=body, headers=TOKEN)
+    assert res.status_code == 400
+
+
+def test_get_report_rejects_overlong_repo_5000_returns_400(client):
+    res = client.get(f"/reports/{'a' * 5000}/1")
+    assert res.status_code == 400
+
+
 def test_store_save_report_bug_still_returns_500(monkeypatch, tmp_path):
     def _boom(self, pr_delta, html):
         raise OSError("디스크 오류 시뮬레이션")

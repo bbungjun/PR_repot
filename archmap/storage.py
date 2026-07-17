@@ -12,16 +12,44 @@ from pathlib import Path
 # 슬래시·역슬래시·"." 단독·".." 등 경로 탈출에 쓰일 수 있는 문자를 모두 배제한다.
 _SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9_.-]+$")
 
+# 경로 구성요소 하나의 최대 바이트 길이.
+#
+# 화이트리스트는 "허용된 문자"만 검사하고 "길이"는 검사하지 않았다. 그 결과
+# 문자는 안전하지만 파일시스템 컴포넌트 한도를 넘는 값이 검증을 통과한 뒤,
+# Path.resolve()/Path.exists()/os.stat()이나 _atomic_write_text가 쓰는
+# tempfile.mkstemp에서 OSError(Errno 36, "File name too long")를 던졌다.
+# OSError는 ValueError가 아니므로 api.py의 `except ValueError` 방어를 그대로
+# 통과해 500으로 유출됐다.
+#
+# Linux의 파일명 컴포넌트 한도(NAME_MAX)는 255바이트다. 하지만 이 컴포넌트는
+# 그대로 파일명이 되지 않고 ".json"/".html" 접미사(최대 5바이트)가 붙거나,
+# _atomic_write_text가 만드는 임시 파일명(".{name}.{8자 난수}.tmp", 실행으로
+# 실측한 오버헤드 14바이트)의 일부가 된다. 실측 결과 이 오버헤드까지 반영한
+# 실제 안전 한계는 255 - 5 - 14 = 236바이트였다(예: manifest의 repo가 236바이트면
+# 저장에 성공하고 237바이트면 OSError가 발생함을 실행으로 확인). 여기에 안전
+# 마진을 두어 200바이트로 제한한다 — 정당한 입력(저장소 이름, 커밋 SHA 등)은
+# 이 한계에 한참 못 미치므로 영향이 없다.
+_MAX_COMPONENT_BYTES = 200
+
 
 def _validate_component(value, field_name: str) -> str:
     """외부 입력을 경로 구성요소로 쓰기 전에 검증한다.
 
-    화이트리스트(영문/숫자/밑줄/점/하이픈)를 벗어나거나 "."·".."인 경우
-    경로 주입(디렉터리 탈출)으로 간주하고 ValueError를 던진다.
+    화이트리스트(영문/숫자/밑줄/점/하이픈)를 벗어나거나 "."·".."인 경우,
+    또는 파일시스템 컴포넌트 한도에 근접할 만큼 긴 경우 경로 주입(디렉터리
+    탈출) 혹은 파일시스템 오류 유발로 간주하고 ValueError를 던진다.
     """
     s = str(value)
     if s in ("", ".", "..") or not _SAFE_COMPONENT.match(s):
         raise ValueError(f"허용되지 않는 {field_name} 값입니다: {value!r}")
+    # 화이트리스트가 ASCII만 허용하므로 문자 수와 바이트 수가 같지만, 의도를
+    # 명확히 하고 방어적으로 두기 위해 바이트 길이로 잰다.
+    byte_len = len(s.encode("utf-8"))
+    if byte_len > _MAX_COMPONENT_BYTES:
+        raise ValueError(
+            f"{field_name} 값이 너무 깁니다(최대 {_MAX_COMPONENT_BYTES}바이트, "
+            f"실제 {byte_len}바이트)"
+        )
     return s
 
 

@@ -161,6 +161,73 @@ def test_save_report_leaves_no_temp_files_on_success(tmp_path):
     assert leftovers == []
 
 
+# --- Critical: 길이 제한 없는 화이트리스트가 OSError(500)를 유출하는 문제 ------
+#
+# _validate_component는 문자 "종류"만 화이트리스트로 검사하고 "길이"는
+# 검사하지 않았다. 문자는 안전하지만 파일시스템 컴포넌트 한도를 넘는 값이
+# 검증을 통과한 뒤 Path.resolve()/exists()나 _atomic_write_text의
+# tempfile.mkstemp에서 OSError(Errno 36, "File name too long")를 던지고,
+# 이는 ValueError가 아니므로 api.py의 `except ValueError` 방어를 그대로
+# 통과해 500으로 유출됐다. 아래 테스트는 그런 값이 OSError가 아니라
+# ValueError로 거부되는지 확인한다.
+
+def test_save_manifest_rejects_overlong_repo(tmp_path):
+    store = Store(tmp_path)
+    arch = dict(_load("architecture_120.json"), repo="a" * 5000)
+    with pytest.raises(ValueError):
+        store.save_manifest(arch)
+
+
+def test_save_manifest_rejects_overlong_revision(tmp_path):
+    store = Store(tmp_path)
+    arch = dict(_load("architecture_120.json"), revision="a" * 5000)
+    with pytest.raises(ValueError):
+        store.save_manifest(arch)
+
+
+def test_save_report_rejects_overlong_repo(tmp_path):
+    store = Store(tmp_path)
+    pr_delta = dict(_load("pr_delta_120.json"), repo="a" * 5000)
+    with pytest.raises(ValueError):
+        store.save_report(pr_delta, "<html>evil</html>")
+
+
+def test_save_report_rejects_overlong_head_sha(tmp_path):
+    store = Store(tmp_path)
+    pr_delta = dict(_load("pr_delta_120.json"), head_sha="a" * 5000)
+    with pytest.raises(ValueError):
+        store.save_report(pr_delta, "<html>evil</html>")
+
+
+def test_load_report_html_rejects_overlong_repo(tmp_path):
+    store = Store(tmp_path)
+    with pytest.raises(ValueError):
+        store.load_report_html("a" * 5000, 1)
+
+
+# 경계값. 실행으로 실측: manifest의 "latest" 파일은 "{repo}.json"으로 저장되고
+# _atomic_write_text가 그 앞에 임시 파일명(".{name}.{8자 난수}.tmp", 실측
+# 오버헤드 14바이트)을 덧붙인 뒤 mkstemp로 생성한다. 즉 repo 하나가 실제로는
+# 최대 len(repo) + 5(".json") + 14(임시파일 스캐폴딩) = len(repo) + 19바이트인
+# 파일명의 일부가 된다. Linux NAME_MAX(255바이트)를 이 오버헤드 없이 그대로
+# repo 한 글자 한도로 쓰면(255바이트), repo가 237바이트만 되어도 실제로는
+# OSError가 유출된다(실측: repo=236 -> 200 OK, repo=237 -> 500). 이 여유를
+# 반영해 저장소는 컴포넌트 하나를 200바이트로 제한한다(_MAX_COMPONENT_BYTES).
+# 아래는 그 경계를 검증한다.
+def test_save_manifest_repo_at_length_limit_ok(tmp_path):
+    store = Store(tmp_path)
+    arch = dict(_load("architecture_120.json"), repo="a" * 200)
+    store.save_manifest(arch)  # 예외 없이 통과해야 한다.
+    assert store.load_manifests()["a" * 200]["revision"] == "3be5fae"
+
+
+def test_save_manifest_repo_over_length_limit_rejected(tmp_path):
+    store = Store(tmp_path)
+    arch = dict(_load("architecture_120.json"), repo="a" * 201)
+    with pytest.raises(ValueError):
+        store.save_manifest(arch)
+
+
 def test_meta_json_untouched_when_write_fails_midway(tmp_path, monkeypatch):
     store = Store(tmp_path)
     base = _load("pr_delta_120.json")
