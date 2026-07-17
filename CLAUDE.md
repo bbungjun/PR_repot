@@ -86,14 +86,18 @@
 
 ## 현재 상태 / 다음 단계
 
-- **상태**: 설계(스펙) 확정. 구현 미착수.
-- **다음**: Phase 0 구현 계획 작성 → 두 레포에 걸침.
-  - *소스 레포(`Autoresearch`)*: 추출기(AST) + CI 워크플로우 + PR 코멘트.
-  - *이 레포(`Autoresearch-archmap`)*: 수신 API + 템플릿 조립(사실 슬롯) + 저장 +
-    Streamlit 맵/피드 탭.
-- **선행**: 프로젝트용 이슈 발행, 두 레포 세팅.
-- Phase 순서: 0(결정론 골격) → 1(sidecar+게이트) → 2(GLM 서술) → 3(airflow) →
-  4(infra).
+- **상태**: Phase 0 구현 완료.
+  - 이 레포(서버): 수신 API + 템플릿 조립(사실 슬롯) + 저장 + Streamlit 맵/피드
+    탭 구현 완료, 테스트 101개 통과.
+  - 추출기: `SKYAHO/Autoresearch` 이슈 #165 / 브랜치 `feat/165-archmap-extractor`
+    에서 구현 완료(테스트 381개 통과). **아직 PR 미생성·미머지.**
+  - E2E 확인: 실제 추출기 산출물(`architecture.json`/`pr-delta.json`)이 이
+    서버의 스키마 검증을 통과해 리포트로 렌더됨을 확인함.
+- **다음**: Phase 1(sidecar `__arch__` + CI 게이트) → Phase 2(GLM 서술) →
+  Phase 3(airflow) → Phase 4(infra).
+- **미결**: 서버 호스팅·배포 미확정(현재는 로컬 실행만 가능). `GET
+  /reports/{repo}/{pr}` 접근제어 미확정 — 스펙 §12는 "Phase 0에서 확정"이라
+  했으나 호스팅이 정해지지 않아 Phase 1로 이월.
 
 ## 참조 (원본 Autoresearch 저장소)
 
