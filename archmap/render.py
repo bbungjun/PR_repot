@@ -69,7 +69,13 @@ def render_report(architecture: dict, pr_delta: dict) -> str:
         changed_modules.append({**m, "anchor": anchor})
 
     hit_stages = {m["stage"] for m in pr_delta["changed_modules"]}
+    # architecture.json과 pr-delta.json은 서로 독립적으로 생성되는 산출물이라
+    # 실제로 어긋날 수 있다. changed_modules가 architecture.stages에 없는
+    # stage를 가리키면, 예전에는 흐름 스트립에서 하이라이트가 경고 없이 통째로
+    # 누락됐다(사실이 조용히 유실됨). 그런 stage를 따로 모아 눈에 띄게
+    # 표시한다 — 없는 사실을 지어내지 않고, 있는 불일치를 숨기지 않는다.
+    unknown_stages = sorted(hit_stages - set(architecture["stages"]))
     template = _env.get_template("pr_report.html.j2")
     return template.render(architecture=architecture, pr_delta=pr_delta,
                            claims=claims, changed_modules=changed_modules,
-                           hit_stages=hit_stages)
+                           hit_stages=hit_stages, unknown_stages=unknown_stages)

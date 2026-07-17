@@ -23,6 +23,7 @@
   .narration-slot { background: #f4f4f7; color: #777; border: 1px dashed #ccc;
                     border-radius: 8px; padding: 1rem; margin: 1rem 0; }
   .empty-notice { color: #888; font-style: italic; }
+  .stage-mismatch { color: #c53030; font-size: .85rem; margin: .3rem 0 1rem; }
   table { border-collapse: collapse; width: 100%; font-size: .9rem; }
   td, th { border: 1px solid #e5e5ee; padding: .4rem .6rem; text-align: left; }
   .meta { color: #666; font-size: .85rem; }
@@ -39,6 +40,10 @@
   <span class="stage{% if stage in hit_stages %} hit{% endif %}">{{ stage }}</span>{% if not loop.last %}<span>→</span>{% endif %}
 {% endfor %}
 </div>
+{% if unknown_stages %}
+<p class="stage-mismatch">⚠ 변경된 모듈이 가리키는 다음 스테이지가 architecture.stages에 없어 흐름 위에
+표시할 수 없습니다: {% for s in unknown_stages %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>
+{% endif %}
 
 <h2>계약 &amp; 영향 (검증은 렌더러가 pr-delta 사실로만 부여)</h2>
 {% for c in claims %}

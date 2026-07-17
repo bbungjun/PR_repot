@@ -130,6 +130,27 @@ def test_empty_changed_modules_section_shows_explicit_notice():
     assert "이 PR에서 감지된 변경 모듈이 없습니다." in html
 
 
+# --- Minor: architecture.stages에 없는 stage가 조용히 사라지지 않게 --------
+#
+# changed_modules[].stage가 architecture.stages에 없으면 예전에는 흐름
+# 스트립에서 하이라이트가 경고 없이 통째로 누락됐다. 두 JSON은 독립적으로
+# 생성되는 산출물이라 실제로 어긋날 수 있다.
+
+def test_unknown_stage_surfaced_as_mismatch_warning():
+    pr_delta = copy.deepcopy(_load("pr_delta_120.json"))
+    pr_delta["changed_modules"][0]["stage"] = "ghost_stage"
+
+    html = render_report(_load("architecture_120.json"), pr_delta)
+
+    assert "ghost_stage" in html
+    assert "architecture.stages에 없어" in html
+
+
+def test_known_stages_show_no_mismatch_warning():
+    html = render_report(_load("architecture_120.json"), _load("pr_delta_120.json"))
+    assert "architecture.stages에 없어" not in html
+
+
 def test_warning_badge_renders_for_breaking_change():
     # 원본 pr_delta_120 픽스처는 breaking 변경이 전혀 없어 warning 배지 렌더
     # 경로가 한 번도 검증되지 않는다. version_changes의 breaking 플래그만 뒤집은
