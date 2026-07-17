@@ -22,36 +22,60 @@ def _claim(status: str, text: str, module: str | None = None, line: int | None =
     return {"status": status, "text": text, "module": module, "line": line}
 
 
+def _singularize(token: str) -> str:
+    # 아주 단순한 단복수 정규화: 끝의 "s"를 벗긴다. 길이 3 이하 토큰은 건드리지
+    # 않는다("as"·"is" 같은 짧은 토큰이 "a"·"i"로 뭉개지는 것을 막는다).
+    # "jobs"→"job", "features"→"feature", "logs"→"log" 등 이 판정에 필요한
+    # 케이스에는 충분하고, 정교한 형태소 분석은 이 정도 판정에 과하다.
+    return token[:-1] if len(token) > 3 and token.endswith("s") else token
+
+
 def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
-    # 이 판정은 이미 두 번 고쳐졌다(마지막 구성요소만 대조하도록 좁혀졌다가,
-    # 스테이지를 넘나드는 오매칭을 냈다):
+    # 이 판정은 이미 네 번 고쳐졌고, 매번 반대 방향 회귀를 냈다:
     #   1) 부분 문자열 대조("log" in "action_logs_daily") → 짧은 모듈명이 무관한
     #      테스트 파일명에 우연히 포함되어 허위 초록.
     #   2) 단일 토큰 완전 일치(mod_name in stem.split("_")) → "llm_generator"처럼
     #      언더스코어로 여러 단어를 잇는 모듈명은 토큰 리스트의 원소가 될 수 없어
     #      영원히 매칭 실패(허위 warning 회귀).
-    #   3) 연속 부분열 대조(마지막 구성요소만) → 1)·2)는 해결했으나 패키지명을
-    #      보지 않아 "schema.py"·"pipeline.py"처럼 여러 스테이지에 동명 파일이
-    #      있으면 서로의 테스트로 오매칭된다(예: action_logs.schema가 무관한
-    #      test_virtual_users_schema.py로 "커버됨" 오판 — 허위 초록).
-    # 그래서 이번에는 두 조건을 모두 요구한다:
+    #   3) 연속 부분열 대조(마지막 구성요소만) → 패키지명을 안 봐서 "schema.py"
+    #      같은 동명 파일이 여러 스테이지에 있으면 서로의 테스트로 오매칭된다
+    #      (action_logs.schema가 무관한 test_virtual_users_schema.py로 "커버됨"
+    #      오판 — 허위 초록).
+    #   4) 패키지 토큰 하나라도 겹치면 통과 → 두 갈래 반대 방향 회귀를 동시에 냄:
+    #      (a) "youtube" 토큰이 youtube_collection 패키지와 jobs.youtube_* 테스트에
+    #          공통으로 등장해, youtube_collection.backfill이 무관한
+    #          test_youtube_backfill_job.py(jobs.youtube_backfill의 테스트)로
+    #          "커버됨" 오판 — 허위 초록.
+    #      (b) "jobs" != "job"(단수) 문자열 불일치로 jobs.* 스테이지 모듈 전부가
+    #          진짜 대응 테스트(test_action_log_job.py 등)가 있어도 영원히
+    #          warning — 안전 방향이지만 문구가 사실과 반대("대응 테스트 변경이
+    #          없습니다"인데 있음)이고 airflow가 소비하는 표면 전체가 초록을
+    #          못 받는 회귀.
+    # 그래서 이번에는 (a)(b)를 동시에 잡기 위해 두 조건을 모두 요구하되, 3)의
+    # 조건(b)를 다시 설계한다:
     #   (a) 모듈명(마지막 구성요소)이 stem 토큰열에 연속 부분열로 나타나야 한다
-    #       (기존 조건, 유지 — 1)·2) 재발 방지).
-    #   (b) 패키지 구성요소(마지막을 제외한 나머지, 각각 "_" 토큰화) 중 최소
-    #       하나가 stem 토큰열에 (순서 무관, 부분열 아니어도) 나타나야 한다
-    #       — 다른 스테이지 패키지와는 토큰이 겹칠 수 없으므로 3)의 오매칭을 막는다.
-    # (b)를 완전 일치가 아니라 "토큰 하나라도 겹침"으로 느슨하게 둔 이유: 실제
-    # 파일명 관례가 항상 패키지명을 그대로 쓰지 않는다(예: "action_logs" 패키지의
-    # 테스트가 "test_action_log_llm_generator.py"처럼 단수형 "log"를 쓰는 경우가
-    # 있다). 패키지 토큰 전부 일치를 요구하면 이런 정당한 커버를 허위 경고로
-    # 놓친다. 토큰 하나(예: "action")만 겹쳐도 같은 패키지 계열임을 강하게
-    # 시사하고, 다른 스테이지 패키지명과는 애초에 토큰이 겹치지 않으므로 허위
-    # 초록 위험 없이 이 완화가 안전하다.
+    #       (기존 조건, 그대로 유지 — 단복수 정규화를 적용하지 않는다. 짧은
+    #       토큰의 우연한 단복수 일치로 1)이 재발하는 것을 막기 위해서다. 예:
+    #       모듈 "action_logs.log"의 mod_token "log"가 무관한 테스트
+    #       "action_logs_daily"의 "logs"(패키지 접두사, 정규화하면 "log")에
+    #       엄밀 매칭 없이 우연히 걸리면 허위 초록이 재발한다).
+    #   (b) 패키지 구성요소는 **가장 가까운 상위 디렉터리 하나만**(마지막을
+    #       제외한 나머지 중 최後 원소, "_" 토큰화 후 단복수 정규화) 본다 —
+    #       "src.features.feature_builder"처럼 3단 모듈 id에서 최상위 "src"는
+    #       (autoresearch/ 아래 모듈은 이미 최상위가 벗겨지는 것과 대칭적으로)
+    #       테스트 파일명에 반영되지 않는 관례적 상위 디렉터리이므로 대조에서
+    #       제외한다. 그 패키지 구성요소의 **토큰 전부**(단복수 정규화 후)가
+    #       stem 토큰열(마찬가지로 정규화)의 부분집합이어야 한다 — "토큰 하나만
+    #       겹쳐도 통과"였던 4)를 "전부 겹쳐야 통과"로 좁혀 (a) 오매칭을 막는다.
+    #       "youtube_collection"은 {youtube, collection} 전부가 필요한데
+    #       "youtube_backfill_job"에는 "collection"이 없어 탈락하고, "jobs"는
+    #       정규화하면 {job} 하나뿐이라 "action_log_job"에 있는 "job"만으로
+    #       충분히 통과한다.
     # 패키지 구성요소가 없는(점이 없는) 최상위 모듈 id는 (b)를 건너뛰고 (a)만으로
     # 판정한다 — 대조할 패키지명 자체가 없다.
     parts = module_id.split(".")
     mod_tokens = parts[-1].split("_")
-    pkg_tokens = {tok for p in parts[:-1] for tok in p.split("_")}
+    pkg_tokens = {_singularize(tok) for tok in parts[-2].split("_")} if len(parts) > 1 else set()
     n = len(mod_tokens)
     for f in test_files:
         stem = f.rsplit("/", 1)[-1].removeprefix("test_").removesuffix(".py")
@@ -60,7 +84,10 @@ def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
             stem_tokens[i:i + n] == mod_tokens for i in range(len(stem_tokens) - n + 1))
         if not mod_matched:
             continue
-        if not pkg_tokens or pkg_tokens & set(stem_tokens):
+        if not pkg_tokens:
+            return True
+        normalized_stem_tokens = {_singularize(tok) for tok in stem_tokens}
+        if pkg_tokens <= normalized_stem_tokens:
             return True
     return False
 

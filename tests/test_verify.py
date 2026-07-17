@@ -198,6 +198,87 @@ def test_cross_stage_same_filename_not_falsely_covered():
     assert hit and hit[0]["status"] == WARNING
 
 
+def test_false_positive_youtube_backfill_job_test_does_not_cover_unrelated_package():
+    # 최종 수용 검사관 지적 (a): "youtube" 토큰이 youtube_collection 패키지와
+    # jobs.youtube_* 테스트에 겹쳐 test_youtube_backfill_job.py가
+    # youtube_collection.backfill(다른 모듈, jobs.youtube_backfill이 아님)까지
+    # "테스트 커버됨"으로 오판했다. youtube_collection의 실제 대응 테스트
+    # test_youtube_collection_backfill.py는 미변경이므로 이건 허위 초록이다.
+    d = _delta()
+    d["changed_modules"].append({
+        "id": "youtube_collection.backfill",
+        "path": "autoresearch/youtube_collection/backfill.py",
+        "stage": "youtube_collection",
+        "symbols_changed": [{"name": "run_backfill", "change": "signature", "line": 1}],
+        "public_surface_changed": True,
+    })
+    d["tests"]["files"] = ["tests/test_youtube_backfill_job.py"]
+    claims = build_claims(d)
+    hit = [c for c in claims if c["module"] == "youtube_collection.backfill" and "테스트" in c["text"]]
+    assert hit and hit[0]["status"] == WARNING
+
+
+def _module_claim_for(module_id: str, path: str, stage: str, test_file: str) -> dict:
+    d = _delta()
+    d["changed_modules"] = [{
+        "id": module_id,
+        "path": path,
+        "stage": stage,
+        "symbols_changed": [{"name": "run", "change": "signature", "line": 1}],
+        "public_surface_changed": True,
+    }]
+    d["tests"]["files"] = [test_file]
+    claims = build_claims(d)
+    hit = [c for c in claims if c["module"] == module_id and "테스트" in c["text"]]
+    assert hit, f"claim missing for {module_id}"
+    return hit[0]
+
+
+def test_jobs_action_log_covered_by_singular_job_test():
+    # 최종 수용 검사관 지적 (b) 회귀 1/5: jobs(복수) != job(단수) 불일치로
+    # 진짜 대응 테스트가 있는데도 warning이 뜨던 회귀. 단복수 정규화로 해소.
+    # 이 스위트에는 jobs.* 픽스처가 없었으므로(검사관 지적) dict를 직접 구성한다.
+    hit = _module_claim_for(
+        "jobs.action_log", "autoresearch/jobs/action_log.py", "orchestration",
+        "tests/test_action_log_job.py")
+    assert hit["status"] == VERIFIED
+
+
+def test_jobs_action_log_quality_covered_by_singular_job_test():
+    # 회귀 2/5.
+    hit = _module_claim_for(
+        "jobs.action_log_quality", "autoresearch/jobs/action_log_quality.py", "orchestration",
+        "tests/test_action_log_quality_job.py")
+    assert hit["status"] == VERIFIED
+
+
+def test_jobs_youtube_backfill_covered_by_singular_job_test():
+    # 회귀 3/5. youtube_collection.backfill(위 false-positive 테스트)과 대조적으로
+    # jobs.youtube_backfill은 이 테스트 파일과 실제로 대응하므로 매칭되어야 한다.
+    hit = _module_claim_for(
+        "jobs.youtube_backfill", "autoresearch/jobs/youtube_backfill.py", "orchestration",
+        "tests/test_youtube_backfill_job.py")
+    assert hit["status"] == VERIFIED
+
+
+def test_jobs_youtube_trending_covered_by_singular_job_test():
+    # 회귀 4/5.
+    hit = _module_claim_for(
+        "jobs.youtube_trending", "autoresearch/jobs/youtube_trending.py", "orchestration",
+        "tests/test_youtube_trending_job.py")
+    assert hit["status"] == VERIFIED
+
+
+def test_src_features_feature_builder_covered_by_singular_feature_test():
+    # 회귀 5/5: features(복수) != feature(단수) 불일치. 또한 3단 모듈 id
+    # (src.features.feature_builder)에서 최상위 "src" 세그먼트가 대조에 끼어들어
+    # 방해하지 않아야 한다.
+    hit = _module_claim_for(
+        "src.features.feature_builder", "src/features/feature_builder.py", "training",
+        "tests/test_feature_builder.py")
+    assert hit["status"] == VERIFIED
+
+
 def test_schema_change_status_depends_only_on_breaking_flag_not_change_value():
     # schema_changes 판정은 change 값("added"/"removed")이 아니라 오직 breaking
     # 플래그에만 의존해야 한다. added+breaking=True는 warning, removed+breaking=False는
