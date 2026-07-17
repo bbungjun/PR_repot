@@ -58,6 +58,16 @@ def build_claims(pr_delta: dict) -> list[dict]:
                 WARNING, f'{x["contract"]} 파괴적 영향({x["impact"]}) — 소비자 전환 PR 필요'))
         else:
             claims.append(_claim(VERIFIED, f'{x["contract"]} 하위호환 영향({x["impact"]})'))
+    # breaking_signatures는 스키마 required가 아니다(추출기가 새로 채우기 시작한
+    # 필드). 없는 델타(기존 픽스처 등)에서도 하위호환되도록 .get()으로 접근한다.
+    # 이 항목들은 정의상 하위호환되지 않는 공개 심볼 변경이므로 항상 WARNING —
+    # 이 판정 규칙만으로 verified가 나올 일은 없다(핵심 불변식 유지).
+    for b in pr_delta.get("breaking_signatures", []):
+        claims.append(_claim(
+            WARNING,
+            f'{b["name"]} 파괴적 변경 — 공개 심볼의 시그니처·종류가 하위호환되지 않게 '
+            f'바뀌었거나 제거되었습니다 (모듈: {b["module"]})',
+            b["module"]))
     test_files = pr_delta["tests"]["files"]
     for m in pr_delta["changed_modules"]:
         if not m["public_surface_changed"]:

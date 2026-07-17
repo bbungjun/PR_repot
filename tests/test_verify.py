@@ -99,6 +99,55 @@ def test_schema_change_added_verified_and_removed_warning():
     assert removed and removed[0]["status"] == WARNING and "필드 제거" in removed[0]["text"]
 
 
+def test_breaking_signature_is_warning_with_symbol_name():
+    # breaking_signatures 항목은 항상 WARNING이어야 하고, 리뷰어가 무엇이
+    # 깨졌는지 알 수 있도록 심볼 이름이 문면에 포함되어야 한다.
+    d = _delta()
+    d["breaking_signatures"] = [
+        {"module": "action_logs.daily", "name": "run_daily_action_log"},
+        {"module": "action_logs.schema", "name": "EventLog"},
+    ]
+    claims = build_claims(d)
+    daily = [c for c in claims if "run_daily_action_log" in c["text"]]
+    event_log = [c for c in claims if "EventLog" in c["text"]]
+    assert daily and daily[0]["status"] == WARNING and daily[0]["module"] == "action_logs.daily"
+    assert event_log and event_log[0]["status"] == WARNING and event_log[0]["module"] == "action_logs.schema"
+
+
+def test_missing_breaking_signatures_field_is_backward_compatible():
+    # 기존 픽스처(필드 없음)에서는 아무 일도 일어나지 않아야 한다 — 필드는
+    # 스키마 required가 아니므로 .get()으로 접근해 하위호환을 보장해야 한다.
+    d = _delta()
+    assert "breaking_signatures" not in d
+    claims_without_field = build_claims(d)
+    d2 = _delta()
+    d2["breaking_signatures"] = []
+    claims_with_empty_field = build_claims(d2)
+    assert claims_without_field == claims_with_empty_field
+    # 기존 6개 판정 계열의 claim 수(unchanged_contracts, version_changes,
+    # cross_repo, changed_modules 2건)에서 변화가 없어야 한다.
+    assert len(claims_without_field) == 5
+
+
+def test_breaking_signature_never_verified_even_if_symbol_also_unchanged():
+    # 핵심 불변식: breaking_signatures 항목은 어떤 상황에서도 verified가 될 수
+    # 없다. 같은 심볼명이 unchanged_contracts에도 나타나 VERIFIED claim을 만들어도
+    # breaking_signatures가 만든 claim 자체는 별개이며 여전히 WARNING이어야 한다.
+    d = _delta()
+    d["breaking_signatures"] = [
+        {"module": "action_logs.schema", "name": "ACTION_LOG_SCHEMA_VERSION"},
+    ]
+    claims = build_claims(d)
+    matches = [c for c in claims if "ACTION_LOG_SCHEMA_VERSION" in c["text"]]
+    # unchanged_contracts가 만든 VERIFIED claim 1개 + breaking_signatures가
+    # 만든 WARNING claim 1개, 총 2개가 있어야 하며 그중 어느 것도 뒤바뀌지 않는다.
+    assert len(matches) == 2
+    statuses = {c["status"] for c in matches}
+    assert statuses == {VERIFIED, WARNING}
+    warning_ones = [c for c in matches if c["status"] == WARNING]
+    assert all(c["status"] != VERIFIED for c in warning_ones)
+
+
 def test_schema_change_status_depends_only_on_breaking_flag_not_change_value():
     # schema_changes 판정은 change 값("added"/"removed")이 아니라 오직 breaking
     # 플래그에만 의존해야 한다. added+breaking=True는 warning, removed+breaking=False는
