@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Autoresearch · 모듈 아키텍처 맵</title>
+<style>
+  /* ============ Reset ============ */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; }
+  h1, h2, h3, h4, p, ul, ol, dl, dd, figure { margin: 0; }
+  ul { padding: 0; list-style: none; }
+  a { color: inherit; }
+  img, svg { display: block; max-width: 100%; }
+
+  /* ============ Tokens ============ */
+  :root {
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+      "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code",
+      Menlo, Consolas, monospace;
+
+    /* cool slate neutrals — chosen, not defaulted */
+    --bg: #eceff4;
+    --surface: #ffffff;
+    --surface-2: #f4f7fb;
+    --border: #d5dce6;
+    --border-strong: #b9c3d1;
+    --text: #17202e;
+    --text-dim: #4d5968;
+    --text-faint: #808b9b;
+
+    --accent: #0e7c92;          /* signal cyan — data / flow */
+    --accent-soft: #d6eef2;
+    --accent-ink: #0a5b6b;
+
+    /* stage wayfinding hues */
+    --s-collect: #0891b2;
+    --s-vu: #7c5cff;
+    --s-action: #c2740a;
+    --s-orch: #5b6b7f;
+    --s-train: #0f9d6b;
+
+    /* blast-radius semantics (separate from accent) */
+    --sev-high: #d63a3a;
+    --sev-high-bg: #fbe4e4;
+    --sev-mid: #c2740a;
+    --sev-mid-bg: #fbeed6;
+    --sev-low: #12924f;
+    --sev-low-bg: #d9f2e2;
+
+    --radius: 12px;
+    --radius-sm: 7px;
+    --shadow: 0 1px 2px rgba(20,30,45,.05), 0 8px 24px -14px rgba(20,30,45,.25);
+    --maxw: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0f17;
+      --surface: #131b28;
+      --surface-2: #0f1622;
+      --border: #263140;
+      --border-strong: #35455a;
+      --text: #e5ecf4;
+      --text-dim: #9aa7b8;
+      --text-faint: #64717f;
+
+      --accent: #2bcbe4;
+      --accent-soft: #10303a;
+      --accent-ink: #7fe3f2;
+
+      --s-collect: #38bdd8;
+      --s-vu: #a48bff;
+      --s-action: #e69a3c;
+      --s-orch: #8697aa;
+      --s-train: #34c98a;
+
+      --sev-high: #f2726f; --sev-high-bg: #351a1c;
+      --sev-mid: #e6a24a; --sev-mid-bg: #33260f;
+      --sev-low: #47c584; --sev-low-bg: #10301f;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px -18px rgba(0,0,0,.7);
+    }
+  }
+  /* explicit toggle wins in both directions */
+  :root[data-theme="light"] {
+    --bg:#eceff4; --surface:#fff; --surface-2:#f4f7fb; --border:#d5dce6; --border-strong:#b9c3d1;
+    --text:#17202e; --text-dim:#4d5968; --text-faint:#808b9b;
+    --accent:#0e7c92; --accent-soft:#d6eef2; --accent-ink:#0a5b6b;
+    --s-collect:#0891b2; --s-vu:#7c5cff; --s-action:#c2740a; --s-orch:#5b6b7f; --s-train:#0f9d6b;
+    --sev-high:#d63a3a; --sev-high-bg:#fbe4e4; --sev-mid:#c2740a; --sev-mid-bg:#fbeed6; --sev-low:#12924f; --sev-low-bg:#d9f2e2;
+  }
+  :root[data-theme="dark"] {
+    --bg:#0a0f17; --surface:#131b28; --surface-2:#0f1622; --border:#263140; --border-strong:#35455a;
+    --text:#e5ecf4; --text-dim:#9aa7b8; --text-faint:#64717f;
+    --accent:#2bcbe4; --accent-soft:#10303a; --accent-ink:#7fe3f2;
+    --s-collect:#38bdd8; --s-vu:#a48bff; --s-action:#e69a3c; --s-orch:#8697aa; --s-train:#34c98a;
+    --sev-high:#f2726f; --sev-high-bg:#351a1c; --sev-mid:#e6a24a; --sev-mid-bg:#33260f; --sev-low:#47c584; --sev-low-bg:#10301f;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); }
+
+  /* ============ Top bar ============ */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar .wrap { display: flex; align-items: center; gap: 16px; height: 56px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; font-weight: 700; letter-spacing: -.01em; }
+  .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); align-self: center; box-shadow: 0 0 0 4px var(--accent-soft); }
+  .brand small { font: 500 11px/1 var(--font-mono); color: var(--text-faint); letter-spacing: .04em; }
+  .topnav { margin-left: auto; display: flex; gap: 4px; }
+  .topnav a {
+    font: 600 12.5px/1 var(--font-sans); text-decoration: none; color: var(--text-dim);
+    padding: 7px 11px; border-radius: 999px; white-space: nowrap;
+  }
+  .topnav a:hover { color: var(--text); background: var(--surface-2); }
+  .theme-btn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
+    border-radius: 999px; width: 34px; height: 34px; cursor: pointer; font-size: 15px;
+    display: grid; place-items: center;
+  }
+  .theme-btn:hover { color: var(--text); border-color: var(--border-strong); }
+  @media (max-width: 760px){ .topnav { display: none; } }
+
+  /* ============ Hero ============ */
+  header.hero { padding: clamp(38px, 6vw, 68px) 0 26px; }
+  .eyebrow {
+    font: 600 11.5px/1 var(--font-mono); letter-spacing: .18em; text-transform: uppercase;
+    color: var(--accent-ink); margin-bottom: 16px;
+  }
+  h1 {
+    font-size: clamp(30px, 5.2vw, 52px); font-weight: 800; letter-spacing: -.03em;
+    line-height: 1.05; text-wrap: balance; max-width: 20ch;
+  }
+  h1 em { font-style: normal; color: var(--accent); }
+  .lede { margin-top: 18px; max-width: 64ch; font-size: 16.5px; color: var(--text-dim); }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  /* one-line pipeline sentence */
+  .thesis {
+    margin-top: 22px; padding: 16px 18px; border-radius: var(--radius);
+    background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+    font: 500 13px/1.4 var(--font-mono);
+  }
+  .thesis .step { color: var(--text); background: var(--surface-2); border: 1px solid var(--border); padding: 5px 9px; border-radius: 7px; }
+  .thesis .step b { color: var(--st, var(--accent)); font-weight: 700; }
+  .thesis .arw { color: var(--text-faint); }
+
+  .meta-row { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .meta-chip {
+    font: 500 12px/1 var(--font-mono); color: var(--text-dim);
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 7px 11px; border-radius: 999px;
+  }
+  .meta-chip b { color: var(--text); font-weight: 600; }
+
+  /* ============ Section scaffold ============ */
+  section { padding: 30px 0; scroll-margin-top: 72px; }
+  .sec-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .sec-head h2 { font-size: clamp(20px, 3vw, 27px); font-weight: 750; letter-spacing: -.02em; }
+  .sec-num { font: 700 12px/1 var(--font-mono); color: var(--text-faint); padding-top: 3px; }
+  .sec-sub { color: var(--text-dim); max-width: 76ch; margin-bottom: 22px; font-size: 14.5px; }
+  .sec-sub b { color: var(--text); font-weight: 600; }
+  .sec-sub code { font-family: var(--font-mono); font-size: .88em; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+  .sec-role {
+    display: block; margin-top: 10px; padding-left: 13px; border-left: 3px solid var(--stage, var(--accent));
+    color: var(--text); font-size: 14px;
+  }
+  .sec-role b { color: var(--stage, var(--accent)); }
+
+  /* ============ Legend ============ */
+  .legend {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 18px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
+  }
+  @media (max-width: 720px){ .legend { grid-template-columns: 1fr; } }
+  .legend h4 { font: 600 11px/1 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 12px; }
+  .legend ul { display: flex; flex-direction: column; gap: 9px; }
+  .legend li { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--text-dim); }
+  .swatch { width: 13px; height: 13px; border-radius: 4px; flex: none; }
+  .sev-dot { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .legend li b { color: var(--text); font-weight: 600; }
+
+  /* ============ Pipeline flow ============ */
+  .flow-scroll { overflow-x: auto; padding: 6px 2px 14px; margin: 0 -2px; }
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(180px, 1fr));
+    gap: 0; min-width: 940px; align-items: stretch;
+  }
+  .flow-col { display: flex; flex-direction: column; gap: 12px; padding: 0 14px; position: relative; }
+  .flow-col:not(:last-child)::after {
+    content: "→"; position: absolute; right: -9px; top: 46px;
+    font-size: 20px; color: var(--text-faint); z-index: 2;
+  }
+  .flow-phase {
+    font: 600 10.5px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-faint); text-align: center; padding-bottom: 4px;
+    border-bottom: 1px dashed var(--border-strong); margin-bottom: 4px;
+  }
+  .node {
+    background: var(--surface); border: 1px solid var(--border);
+    border-left: 3px solid var(--nc, var(--accent));
+    border-radius: var(--radius-sm); padding: 10px 12px; box-shadow: var(--shadow);
+  }
+  .node .nt { font: 600 13px/1.3 var(--font-mono); color: var(--text); }
+  .node .nd { font-size: 11.5px; color: var(--text-dim); margin-top: 3px; }
+  .node.ext { border-style: dashed; box-shadow: none; background: var(--surface-2); }
+  .artifact {
+    font: 500 11px/1.35 var(--font-mono); color: var(--accent-ink);
+    background: var(--accent-soft); border-radius: 6px; padding: 6px 9px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .artifact::before { content: "▤"; opacity: .7; }
+  .flow-note { font-size: 12.5px; color: var(--text-dim); margin-top: 14px; }
+  .flow-note b { color: var(--text); }
+
+  /* ============ Module cards ============ */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-top: 3px solid var(--stage, var(--accent));
+    border-radius: var(--radius); padding: 16px 17px; box-shadow: var(--shadow);
+    display: flex; flex-direction: column;
+  }
+  .card-top { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+  .card h3 { font: 650 14.5px/1.3 var(--font-mono); letter-spacing: -.01em; word-break: break-word; }
+  .card h3 .path { color: var(--text-faint); font-weight: 500; }
+  .sev {
+    margin-left: auto; flex: none; font: 700 10px/1 var(--font-mono); letter-spacing: .03em;
+    text-transform: uppercase; padding: 4px 7px; border-radius: 999px; white-space: nowrap;
+  }
+  .sev.high { color: var(--sev-high); background: var(--sev-high-bg); }
+  .sev.mid  { color: var(--sev-mid);  background: var(--sev-mid-bg); }
+  .sev.low  { color: var(--sev-low);  background: var(--sev-low-bg); }
+
+  /* NEW — plain-language functional description */
+  .role { font-size: 13.5px; color: var(--text); margin: 0 0 12px; line-height: 1.62; }
+  .role .lead { font-weight: 650; color: var(--stage, var(--accent)); }
+
+  /* NEW — responsibility boundary (담당 / 비담당) */
+  .scope { display: flex; flex-direction: column; gap: 6px; margin: 0 0 13px;
+    padding: 11px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .scope p { margin: 0; display: grid; grid-template-columns: 58px 1fr; gap: 9px; align-items: start; font-size: 12.5px; }
+  .scope .tag {
+    font: 700 9.5px/1.7 var(--font-mono); letter-spacing: .04em; text-align: center;
+    padding: 1px 0; border-radius: 5px; white-space: nowrap;
+  }
+  .scope .does .tag { color: var(--sev-low); background: var(--sev-low-bg); }
+  .scope .nots .tag { color: var(--text-faint); background: var(--surface); border: 1px solid var(--border); }
+  .scope .does .txt { color: var(--text); }
+  .scope .nots .txt { color: var(--text-dim); }
+  .scope .txt em { font-style: normal; font-family: var(--font-mono); font-size: .9em; color: inherit; }
+
+  .io { display: grid; grid-template-columns: auto 1fr; gap: 7px 12px; align-items: start; }
+  .io dt {
+    font: 600 10px/1.5 var(--font-mono); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-faint); padding-top: 2px; white-space: nowrap;
+  }
+  .io dd { font-size: 12.5px; color: var(--text); margin: 0; }
+  .io dd code, .mono { font-family: var(--font-mono); font-size: 11.5px; }
+  .io dd code {
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: .5px 5px; border-radius: 5px; color: var(--text); word-break: break-word;
+  }
+  .io .in dt  { color: var(--stage, var(--s-collect)); }
+  .io hr { grid-column: 1 / -1; border: none; border-top: 1px dashed var(--border); margin: 3px 0; }
+
+  .impact {
+    margin-top: 12px; padding: 10px 11px; border-radius: var(--radius-sm);
+    background: var(--surface-2); border: 1px solid var(--border);
+    font-size: 12px; color: var(--text-dim);
+  }
+  .impact b { color: var(--text); font-weight: 650; display: block; font-size: 10px;
+    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; font-family: var(--font-mono); }
+  .impact .dep { font-family: var(--font-mono); color: var(--text); font-size: 11px; }
+
+  /* stage color assignment on section */
+  .stage-collect { --stage: var(--s-collect); }
+  .stage-vu      { --stage: var(--s-vu); }
+  .stage-action  { --stage: var(--s-action); }
+  .stage-orch    { --stage: var(--s-orch); }
+  .stage-train   { --stage: var(--s-train); }
+
+  .stage-tag {
+    display: inline-flex; align-items: center; gap: 7px; font: 600 11px/1 var(--font-mono);
+    letter-spacing: .05em; text-transform: uppercase; color: var(--stage);
+    background: color-mix(in srgb, var(--stage) 12%, transparent);
+    padding: 6px 11px; border-radius: 999px;
+  }
+  .stage-tag::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--stage); }
+
+  /* ============ Contract table ============ */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; background: var(--surface); }
+  thead th {
+    text-align: left; font: 600 10.5px/1.3 var(--font-mono); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-faint); padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+    position: sticky; top: 0;
+  }
+  tbody td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td .mono { display: inline-block; font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-ink);
+    background: var(--accent-soft); padding: 2px 6px; border-radius: 5px; }
+  td .from-to { font-family: var(--font-mono); font-size: 11.5px; color: var(--text); }
+
+  /* ============ Footer ============ */
+  footer { padding: 40px 0 60px; color: var(--text-faint); font-size: 12.5px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+  footer code { font-family: var(--font-mono); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>Autoresearch <small>MODULE MAP</small></div>
+    <nav class="topnav">
+      <a href="#flow">파이프라인 흐름</a>
+      <a href="#collect">수집</a>
+      <a href="#vu">가상 유저</a>
+      <a href="#action">액션 로그</a>
+      <a href="#orch">오케스트레이션</a>
+      <a href="#train">CTR 학습</a>
+      <a href="#contracts">데이터 계약</a>
+    </nav>
+    <button class="theme-btn" id="themeBtn" aria-label="테마 전환" title="라이트/다크 전환">◐</button>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Architecture Reference · YouTube CTR Pipeline</div>
+    <h1>각 모듈은 <em>무슨 일</em>을 하고<br><em>어디를</em> 담당하는가</h1>
+    <p class="lede">
+      Autoresearch의 최종 목표는 <b>"이 사용자에게 이 영상을 보여주면 클릭할까?"</b>를 예측하는 CTR 모델입니다.
+      그런데 실제 사용자 클릭 로그가 없으므로, <b>가상의 사용자를 만들고</b> · <b>실제 트렌딩 영상을 수집한 뒤</b> ·
+      <b>둘을 만나게 해 클릭 로그를 합성</b>하고 · 그 로그로 <b>모델을 학습</b>합니다.
+      아래는 그 네 단계를 이루는 모듈 각각이 무엇을 맡는지 정리한 지도입니다.
+    </p>
+    <div class="thesis">
+      <span class="step" style="--st:var(--s-vu)"><b>가상 유저 생성</b></span>
+      <span class="arw">＋</span>
+      <span class="step" style="--st:var(--s-collect)"><b>트렌딩 영상 수집</b></span>
+      <span class="arw">→</span>
+      <span class="step" style="--st:var(--s-action)"><b>클릭 로그 합성</b></span>
+      <span class="arw">→</span>
+      <span class="step" style="--st:var(--s-train)"><b>CTR 모델 학습</b></span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-chip"><b>범위</b> main · <code>autoresearch/</code> + <code>src/</code></span>
+      <span class="meta-chip"><b>런타임</b> Python 3.12 · Airflow · Cloud Run</span>
+      <span class="meta-chip"><b>공통 구조</b> schema · pipeline · generator · Protocol</span>
+    </div>
+  </div>
+</header>
+
+<section id="legend">
+  <div class="wrap">
+    <div class="legend">
+      <div>
+        <h4>파이프라인 스테이지 (색상)</h4>
+        <ul>
+          <li><span class="swatch" style="background:var(--s-collect)"></span> <b>youtube_collection</b> — 트렌딩 영상을 모아 레이크에 쌓는다</li>
+          <li><span class="swatch" style="background:var(--s-vu)"></span> <b>virtual_users</b> — 학습에 쓸 가상 사용자를 만든다</li>
+          <li><span class="swatch" style="background:var(--s-action)"></span> <b>action_logs</b> — 유저×영상으로 클릭 로그를 합성한다</li>
+          <li><span class="swatch" style="background:var(--s-orch)"></span> <b>jobs · dags</b> — 위 작업을 정해진 시각/방식으로 실행한다</li>
+          <li><span class="swatch" style="background:var(--s-train)"></span> <b>src · feature_repo</b> — 로그로 CTR 모델을 학습한다 (별도 스택)</li>
+        </ul>
+      </div>
+      <div>
+        <h4>수정 시 영향 (blast radius)</h4>
+        <ul>
+          <li><span class="sev-dot" style="background:var(--sev-high)"></span> <b>높음</b> — 스키마/데이터 계약. 다수 모듈 + 영속 parquet + 하류까지 파급</li>
+          <li><span class="sev-dot" style="background:var(--sev-mid)"></span> <b>중간</b> — 파이프라인 진입점. DAG/CLI 계약, 여러 호출부 영향</li>
+          <li><span class="sev-dot" style="background:var(--sev-low)"></span> <b>낮음</b> — 내부 헬퍼/독립 유틸. 국소적, 호출부 제한적</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="flow">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">01</span><h2>파이프라인 데이터 흐름</h2></div>
+    <p class="sec-sub">
+      외부 소스에서 시작해 두 갈래(<b>가상 유저</b>, <b>트렌딩 영상</b>)로 각각 데이터를 만든 뒤,
+      <code>action_logs</code>에서 합류시켜 클릭 로그를 만들고, 마지막에 학습 스택으로 넘깁니다.
+      일별 배치는 <b>KST 00:30 수집 → KST 01:00 로그 합성</b> 순서로 실행됩니다.
+    </p>
+    <div class="flow-scroll">
+      <div class="flow">
+        <div class="flow-col">
+          <div class="flow-phase">외부 소스</div>
+          <div class="node ext" style="--nc:var(--s-vu)"><div class="nt">Nemotron-Personas-Korea</div><div class="nd">NVIDIA HF 데이터셋 · KR 페르소나</div></div>
+          <div class="node ext" style="--nc:var(--s-collect)"><div class="nt">YouTube Data API v3</div><div class="nd">chart=mostPopular · KR</div></div>
+          <div class="node ext" style="--nc:var(--s-collect)"><div class="nt">Kaggle global parquet</div><div class="nd">과거 트렌딩 (backfill)</div></div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-phase">수집 · 생성</div>
+          <div class="node" style="--nc:var(--s-vu)"><div class="nt">virtual_users</div><div class="nd">persona_source → glm_generator → pipeline</div></div>
+          <div class="node" style="--nc:var(--s-collect)"><div class="nt">youtube_collection</div><div class="nd">client → fetch → transform</div></div>
+          <div class="node" style="--nc:var(--s-collect)"><div class="nt">· proxy (Cloud Run)</div><div class="nd">egress seam · IP밴 대응</div></div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-phase">데이터 레이크</div>
+          <div class="artifact">asset/virtual_user/*.parquet<br>(user_id 키)</div>
+          <div class="artifact">data_lake/youtube_trending_kr/<br>dt=YYYY-MM-DD/part-0.parquet</div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-phase">클릭 로그 합성</div>
+          <div class="node" style="--nc:var(--s-action)"><div class="nt">action_logs</div><div class="nd">candidate → llm_generator → pipeline → daily</div></div>
+          <div class="artifact">data_lake/action_log/<br>dt=…/part-0.parquet (long-format)</div>
+        </div>
+        <div class="flow-col">
+          <div class="flow-phase">학습 스택</div>
+          <div class="node" style="--nc:var(--s-train)"><div class="nt">src/ CTR pipeline</div><div class="nd">build → train → evaluate (LightGBM)</div></div>
+          <div class="node" style="--nc:var(--s-train)"><div class="nt">feature_repo (Feast)</div><div class="nd">BigQuery offline + Redis online</div></div>
+          <div class="artifact">artifacts/models/<br>lgbm_model.joblib</div>
+        </div>
+      </div>
+    </div>
+    <p class="flow-note">
+      <b>합류점:</b> <span class="mono">action_logs</span>는 같은 날짜의 트렌딩 parquet과 가상 유저 parquet 두 입력을 받습니다.
+      <b>어댑터 없음:</b> 가상 유저 parquet은 <span class="mono">pq.read_table().to_pylist()</span>로 그대로 소비되므로 <span class="mono">user_id</span> 컬럼명이 곧 계약입니다.
+    </p>
+  </div>
+</section>
+
+<section id="collect" class="stage-collect">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">02</span><h2>youtube_collection</h2></div>
+    <p class="sec-sub">
+      <span class="stage-tag">수집 파이프라인</span>
+      <span class="sec-role"><b>담당 영역 —</b> 모델이 "보여줄 영상 후보"로 쓸 <b>실제 KR 트렌딩 영상</b>을 매일 확보하는 일. YouTube에서 데이터를 안전하게 긁어와, 정규 스키마로 다듬고, 데이터 레이크에 날짜별로 쌓습니다. 여기가 파이프라인의 <b>영상 쪽 원천</b>입니다.</span>
+    </p>
+    <div class="cards">
+
+      <article class="card">
+        <div class="card-top"><h3>schema<span class="path">.py</span></h3><span class="sev high">영향 높음</span></div>
+        <p class="role"><span class="lead">"트렌딩 영상 한 편"의 표준 정의서.</span> 영상에 어떤 컬럼이 있고(제목·조회수·채널·태그 등 29개) 각 값이 어떤 타입·범위여야 하는지를 한 곳에 못박아, 뒤따르는 모든 모듈이 같은 모양을 공유하게 합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">필드·타입 검증, 스키마 버전 식별, KR 스코프 상수 제공</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">값을 실제로 파싱·변환(<em>transform</em>), 파일로 적재(<em>load</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>없음 (계약 정의 · 최하위 계층)</dd></div>
+          <dt>OUT</dt><dd><code>TrendingVideo</code> pydantic 모델</dd>
+          <hr>
+          <dt>계약</dt><dd><code>SCHEMA_VERSION="youtube_trending_kr_v1"</code> · <code>TARGET_COUNTRY="KR"</code> · 통계 필드 <code>ge=0</code> · 같은 영상 매일 별도 행(dedup 금지 — 일자별 델타가 피처)</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>필드/타입 변경 시 <span class="dep">transform · load(_SCHEMA) · backfill</span> 전부 + 영속 parquet + 하류 <span class="dep">action_logs.video_source</span>까지. 버전 올려야 함.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>transform<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">서로 다른 원천을 하나의 표준으로 맞추는 어댑터.</span> 과거 Kaggle CSV와 실시간 API 응답은 형식이 제각각인데, 이 모듈이 둘 다 같은 통로로 통과시켜 날짜·타입·국가를 정규화한 <code class="mono">TrendingVideo</code>로 바꿉니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">타입 강제 변환, 날짜 포맷 정규화, naive→UTC, KR-only 강제</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">API 호출·페이지네이션(<em>fetch</em>), 파일 IO(<em>load</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>raw <code>dict</code> (API item / Kaggle row) + <code>collected_at</code></dd></div>
+          <dt>OUT</dt><dd><code>TrendingVideo</code></dd>
+          <hr>
+          <dt>계약</dt><dd><code>normalize_api_item(video_item, channel_item, category_map, *, collected_at, region_code="KR")</code> · <code>normalize_kaggle_row(row, collected_at)</code> · KR 외 <code>ValueError</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>변환 규칙(날짜/bool/tags)이 바뀌면 <span class="dep">fetch · backfill</span> 출력과 적재 데이터 품질에 직접 반영.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>fetch<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">영상을 실제로 긁어와 완성 레코드로 조립하는 수집 지휘자.</span> 트렌딩 목록을 페이지 단위로 받아오고, 각 영상의 채널 정보와 카테고리 이름을 추가로 조회해 하나로 합칩니다. DAG이 매일 호출하는 진입점.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">페이지네이션, 채널 50개 배치 조회, 카테고리 id→이름, dedup</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">HTTP·재시도·Key 회전(<em>client</em>), 정규화(<em>transform</em>), 적재(<em>load</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>3개 callable <code>list_videos/channels/categories</code> (client 주입)</dd></div>
+          <dt>OUT</dt><dd><code>list[TrendingVideo]</code></dd>
+          <hr>
+          <dt>계약</dt><dd><code>collect_trending(list_videos, list_channels, list_categories, *, collected_at, region_code="KR", max_results=200)</code> · googleapiclient 직접 import 안 함(주입 seam)</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>시그니처 변경 시 <span class="dep">dags/youtube_trending_kr_daily</span> 호출부 수정. 쿼터(~7 units/일) 로직 영향.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>client<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">API 장애·IP밴에도 수집이 죽지 않게 하는 방탄 계층.</span> fetch에게는 "그냥 부르면 되는 함수 3개"로 보이지만, 내부에서는 재시도·API Key 교체·IP밴 감지·차단기(circuit breaker)를 겹겹이 돌려 실패를 흡수합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">지수 백오프 재시도, Key 회전, IP밴 판정, breaker, 프록시 경로 전환</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">데이터 조립·정규화(<em>fetch/transform</em>), 프록시 서버 자체(<em>proxy/</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>keys: list[str]</code>, <code>proxy_url</code></dd></div>
+          <dt>OUT</dt><dd><code>YouTubeCallables</code> (NamedTuple)</dd>
+          <hr>
+          <dt>계약</dt><dd><code>ResilientYouTubeClient(...).make_callables()</code> · <code>Verdict</code> enum · <code>CollectionExhausted</code> · 프록시 규약 <code>/youtube/v3/{resource}</code> + <code>X-Goog-Api-Key</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b><span class="dep">fetch</span>와 callable 계약, <span class="dep">proxy/app.py</span>와 HTTP 경로·헤더 계약 공유. 어느 쪽 변경도 짝 맞춰야 함.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>load<span class="path">.py</span></h3><span class="sev high">영향 높음</span></div>
+        <p class="role"><span class="lead">완성된 하루치 영상을 레이크에 떨어뜨리는 적재기.</span> 고정된 컬럼 스키마의 parquet 한 개를 <code class="mono">dt=날짜</code> 폴더에 씁니다. 같은 날 다시 돌려도 덮어쓰기라 안전(멱등)하고, 로컬/GCS를 같은 코드로 처리합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">고정 스키마 parquet 쓰기, 로컬/GCS 분기, 멱등 덮어쓰기</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">정규화(<em>transform</em>), 스케줄링·버킷 결정(<em>DAG</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>list[TrendingVideo]</code>, <code>base_path</code>, <code>partition_date</code></dd></div>
+          <dt>OUT</dt><dd><code>{base_path}/dt=YYYY-MM-DD/part-0.parquet</code> 경로</dd>
+          <hr>
+          <dt>계약</dt><dd><code>write_partition(videos, base_path, partition_date, *, filesystem=None)</code> · <code>_SCHEMA</code>(29컬럼, ts=us/UTC) · <code>None</code>=로컬 / <code>GcsFileSystem</code>=GCS</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>경로 규칙/스키마 변경은 <span class="dep">backfill</span>, DAG, 이 레이크를 읽는 <span class="dep">action_logs.video_source</span> 전부에 파급.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>backfill<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">과거 데이터를 한 번에 채워 넣는 소급 적재기.</span> 실시간 수집(fetch/client) 없이, Kaggle 글로벌 덤프에서 KR 행만 골라 트렌딩 날짜별 파티션으로 레이크를 소급 구성합니다. 초기 세팅용 1회성 경로.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">KR pushdown 필터 읽기, per-row 예외 격리, 날짜별 그룹핑</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">실시간 API 수집(과거 데이터 전용)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>source_path</code> (Kaggle parquet), <code>base_path</code></dd></div>
+          <dt>OUT</dt><dd>쓰인 총 행 수 <code>int</code> (dt별 파티션)</dd>
+          <hr>
+          <dt>계약</dt><dd><code>backfill_from_parquet(source_path, base_path, *, collected_at=None, filesystem=None)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b><span class="dep">load · transform.COUNTRY_ALIASES</span>에 의존하나 이 모듈을 읽는 하류는 없음.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>proxy/app<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">IP밴을 피하기 위한 우회 출구(egress seam).</span> 수집 서버의 IP가 차단되지 않도록, YouTube 요청을 Cloud Run을 거쳐 내보내는 얇은 중계기입니다. 판단은 안 하고 그대로 전달만 하는 "dumb forwarder".</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">경로 화이트리스트 전달, path traversal 차단, key query 차단, liveness</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">Key 상태·회전(<em>client</em>가 담당), 재시도·에러 분류</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>HTTP GET + <code>X-Goog-Api-Key</code> 헤더</dd></div>
+          <dt>OUT</dt><dd>upstream JSON passthrough / 400·502·503</dd>
+          <hr>
+          <dt>계약</dt><dd><code>GET /youtube/v3/{rest_path}</code> · <code>GET /health</code> · <code>key</code> query 차단(마스킹 불변량) · <code>UNHEALTHY_THRESHOLD=3</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>코드 의존 없음(별도 배포). 유일한 결합은 <span class="dep">client.py</span>와의 HTTP 경로·헤더 계약. 규약 변경 시 양쪽 동시 수정.</div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section id="vu" class="stage-vu">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">03</span><h2>virtual_users</h2></div>
+    <p class="sec-sub">
+      <span class="stage-tag">생성 파이프라인</span>
+      <span class="sec-role"><b>담당 영역 —</b> 실제 사용자 데이터가 없으니 <b>학습에 쓸 가상의 시청자를 만들어내는 일</b>. 실존 인물 통계(NVIDIA 페르소나)를 표본으로 뽑아, LLM으로 "이 사람은 유튜브를 어떻게 볼까"를 상상해 붙입니다. 파이프라인의 <b>사용자 쪽 원천</b>입니다.</span>
+    </p>
+    <div class="cards">
+
+      <article class="card">
+        <div class="card-top"><h3>schema<span class="path">.py</span></h3><span class="sev high">영향 높음</span></div>
+        <p class="role"><span class="lead">"가상 유저 한 명"의 표준 정의서.</span> 나이·성별·직업·관심 카테고리·시청 시간대 등 한 유저가 가질 속성과 생성 요청 파라미터를 정의합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">유저·요청·프로필 모델 정의, 버전 상수, 연령 버킷 규칙</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">LLM 값 채우기(<em>glm_generator</em>), 저장(<em>pipeline</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>없음 (계약 정의)</dd></div>
+          <dt>OUT</dt><dd><code>VirtualUser · GenerationRequest · YouTubeProfile</code> 등</dd>
+          <hr>
+          <dt>계약</dt><dd><code>GENERATION_SCHEMA_VERSION="virtual_user_schema_v1"</code> · <code>age_bucket_for_age(age)</code> · <code>sex ∈ {male,female}</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>필드 변경 시 <span class="dep">glm_generator · pipeline(33필드 parquet)</span> + 하류 <span class="dep">action_logs</span>가 읽는 <code>user_id</code> 계약까지.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>persona_source<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">원본 인물을 골라오는 소싱 계층.</span> NVIDIA 데이터셋에서 KR 페르소나를 스트리밍으로 불러와, 연령·성별이 한쪽으로 쏠리지 않게 균형 잡힌 표본을 뽑습니다. 테스트용 fixture 모드도 제공.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">HF 데이터셋 로드, 연령·성별 균형 샘플링, fixture 생성</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">소비 성향 채우기(<em>glm_generator</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>HF <code>nvidia/Nemotron-Personas-Korea</code> (streaming) / fixture</dd></div>
+          <dt>OUT</dt><dd><code>list[dict]</code> raw 페르소나</dd>
+          <hr>
+          <dt>계약</dt><dd><code>sample_raw_personas_by_contract(records, age_min, age_max, male_count, female_count, seed)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b><span class="dep">pipeline · glm_generator</span>가 소비. 샘플링 규칙 변경은 분포에 반영되나 스키마 불변.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>glm_generator<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">페르소나에 유튜브 취향을 입히는 생성기.</span> 원본 인물 정보를 LLM에 주고 "선호 카테고리·시청 시간대" 같은 소비 성향을 받아온 뒤, 코드가 id·해시 등 필수 필드를 도장 찍어 완성된 가상 유저로 조립합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">LLM 호출, 응답 JSON 파싱, 코드 stamp 필드 부여</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">인물 샘플링(<em>persona_source</em>), 배치·저장(<em>pipeline</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>raw 페르소나 row, <code>virtual_user_id</code></dd></div>
+          <dt>OUT</dt><dd><code>VirtualUser</code> (또는 raw 텍스트)</dd>
+          <hr>
+          <dt>계약</dt><dd>generator 공통 <code>generate(raw_row, id) -> str</code> · <code>GLMVirtualUserGenerator</code>(glm-5.2) · <code>OpenRouterVirtualUserGenerator</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>프롬프트/파싱 변경은 <span class="dep">pipeline</span> quarantine 비율에 영향. env <code>ZAI_API_KEY · OPENROUTER_API_KEY</code>.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>categories<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">관심 카테고리의 허용 사전.</span> 유저의 선호 카테고리가 정해진 15개 YouTube 카테고리 어휘 안에 있도록 강제하고, 카테고리 선호도(affinity)를 계산하는 헬퍼를 제공합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">카테고리 vocab 정의, 검증, affinity 계산</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">유저 생성 로직 자체</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>categories 리스트, allowed vocab</dd></div>
+          <dt>OUT</dt><dd>검증된 <code>list[str]</code> / affinity <code>dict</code></dd>
+          <hr>
+          <dt>계약</dt><dd><code>DEFAULT_KAGGLE_YOUTUBE_CATEGORIES</code> · <code>validate_categories(...)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>vocab 변경은 <span class="dep">schema · glm_generator</span> 검증에 반영. leaf 모듈.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>pipeline<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">유저 N명을 실제로 찍어내는 배치 본체.</span> 소싱·생성 조각을 묶어 유저를 병렬로 만들고, 검증을 통과한 것만 parquet에 저장하며 실패분은 quarantine으로 격리합니다. 전량/대량 실패 시 가드로 중단.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">행 단위 격리·병렬 생성, 검증, parquet/quarantine 저장, 실패 가드</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">스케줄링(전용 DAG 없음), category affinity 점수화</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>GenerationRequest</code>, <code>records</code>, <code>generator</code></dd></div>
+          <dt>OUT</dt><dd><code>GenerationResult</code> + <code>*.parquet</code> (user_id 키)</dd>
+          <hr>
+          <dt>계약</dt><dd><code>generate_virtual_user_batch(request, records, generator)</code> · <code>VIRTUAL_USERS_PARQUET_SCHEMA</code>(33필드) · <code>VirtualUserGenerator</code> Protocol</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>공개 진입점. parquet 스키마/키 컬럼 변경은 하류 <span class="dep">action_logs</span> 소비를 깨뜨림.</div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section id="action" class="stage-action">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">04</span><h2>action_logs</h2></div>
+    <p class="sec-sub">
+      <span class="stage-tag">클릭 로그 합성</span>
+      <span class="sec-role"><b>담당 영역 —</b> 파이프라인의 <b>심장부</b>. 앞의 두 원천(가상 유저 · 트렌딩 영상)을 만나게 해, "이 유저가 이 영상들을 보면 뭘 클릭할까"를 LLM으로 판단하고 <b>impression/click/view/like 이벤트 로그</b>를 합성합니다. 이 로그가 곧 CTR 모델의 학습 데이터(라벨 원천)입니다.</span>
+    </p>
+    <div class="cards">
+
+      <article class="card">
+        <div class="card-top"><h3>schema<span class="path">.py</span></h3><span class="sev high">영향 높음</span></div>
+        <p class="role"><span class="lead">"이벤트 한 줄"의 표준 정의서.</span> 누가(user) · 언제 · 어떤 영상에(video) · 무슨 행동(impression/click/view/like)을 했는지를 정의합니다. 목표 CTR·후보 수 같은 생성 규칙도 여기 상수로 고정.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">이벤트·요청·shard manifest 모델 정의, CTR/후보 상수</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt"><em>clicked</em> 라벨 저장(하류가 impression⋈click로 파생)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>없음 (계약 정의)</dd></div>
+          <dt>OUT</dt><dd><code>EventLog · EventGenerationRequest · ActionLogShardManifest</code></dd>
+          <hr>
+          <dt>계약</dt><dd><code>ACTION_LOG_SCHEMA_VERSION="action_log_schema_v1"</code> · <code>PROMPT_VERSION="action_log_ctr_v4"</code> · <code>target_ctr=0.02</code> · <code>candidates_per_user=24</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>이벤트 필드 변경은 <span class="dep">pipeline(EVENT_LOG_PARQUET_SCHEMA) · daily</span> + 영속 로그 + CTR 학습셋 빌더까지.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>video_source<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">수집 레이크를 이 스테이지의 입력으로 바꾸는 어댑터.</span> youtube_collection이 쌓아둔 트렌딩 parquet을 읽어 "노출 후보로 쓸 영상 목록"으로 변환하고, 영상별 재생 길이를 결정론적으로 부여합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">트렌딩 parquet 로드, 결정론적 duration 부여, fixture 생성</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">후보 선택 로직(<em>candidate</em>), 클릭 판단(<em>llm_generator</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>data_lake/youtube_trending_kr/dt=…/part-0.parquet</code></dd></div>
+          <dt>OUT</dt><dd><code>list[dict]</code> VideoRecord</dd>
+          <hr>
+          <dt>계약</dt><dd><code>load_video_records(path, filesystem=None)</code> · <code>nominal_duration_sec(video_id) ∈ [60,900]</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>상류 <span class="dep">youtube_collection.load</span> 스키마와 결합. 필드 참조 변경 시 함께 확인.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>candidate<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">"각 유저에게 뭘 보여줄지" 노출 목록 구성기.</span> 유저 관심사에 맞춘 개인화 영상, 인기 영상, 무작위 탐색 영상을 정해진 비율(0.7 / 0.2 / 0.1)로 섞어 후보 세트를 만듭니다. 실제 추천 노출을 흉내 내는 부분.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">개인화·인기·탐색 혼합으로 후보 노출 구성</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">클릭 여부 판단(<em>llm_generator</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>virtual_user</code>, <code>videos</code>, ratio, <code>rng</code></dd></div>
+          <dt>OUT</dt><dd><code>list[dict]</code> 후보</dd>
+          <hr>
+          <dt>계약</dt><dd><code>build_candidates(virtual_user, videos, candidates_per_user, exploration_ratio, rng, *, personalized_ratio=0.7, popular_ratio=0.2)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b><span class="dep">llm_generator(관련성 헬퍼 재사용) · pipeline</span>이 소비. 후보 구성 규칙 국소 변경.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>llm_generator<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">"이 유저가 뭘 클릭할까"를 판단하는 두뇌.</span> 유저와 후보 영상들을 LLM에 제시해, 후보별 클릭 성향(cp)과 시청 비율(wf)을 받아옵니다. 응답이 스키마에 안 맞으면 재시도하는 안정화 로직 포함.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">프롬프트 구성, OpenRouter 호출, schema 재시도, 스레드 풀</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">전역 CTR 정규화(<em>pipeline</em>), 후보 구성(<em>candidate</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>virtual_user</code>, <code>videos</code></dd></div>
+          <dt>OUT</dt><dd>JSON <code>{"j": [[index, cp, wf], ...]}</code></dd>
+          <hr>
+          <dt>계약</dt><dd>generator 공통 <code>generate(virtual_user, videos) -> str</code> · <code>OpenRouterActionLogGenerator</code>(context manager) · <code>build_action_log_prompt(...)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>프롬프트/포맷 변경은 <code>PROMPT_VERSION</code> 갱신 대상. env <code>OPENROUTER_*</code> 다수.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>pipeline<span class="path">.py</span></h3><span class="sev high">영향 높음</span></div>
+        <p class="role"><span class="lead">판단을 실제 이벤트 로그로 만드는 합성 본체.</span> 유저별 LLM 판단을 모아 <b>전역 2% CTR</b>이 되도록 정규화한 뒤, 이를 impression/click/view/like 이벤트로 펼쳐 타임스탬프를 붙이고 parquet·체크포인트로 저장합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">격리 생성, 전역 CTR 정규화, 이벤트 확장, parquet·checkpoint 저장</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt"><em>clicked</em> 라벨 저장, CTR 학습셋 빌더</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>request</code>, <code>virtual_users</code>, <code>videos</code>, <code>generator</code></dd></div>
+          <dt>OUT</dt><dd><code>EventGenerationResult</code> + 12컬럼 parquet + warehouse jsonl</dd>
+          <hr>
+          <dt>계약</dt><dd><code>generate_action_log_batch(request, virtual_users, videos, generator, progress_callback=None)</code> · <code>EVENT_LOG_PARQUET_SCHEMA</code> · <code>derive_would_like(cp, wf)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>핵심 진입점. parquet/checkpoint 스키마 변경은 <span class="dep">daily · jobs.action_log</span> 두 진입점 + shard/merge 재개 로직 전부.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>daily<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">DAG과 CLI가 공유하는 실행 창구.</span> 위 pipeline을 하루 단위 작업으로 감싼 세 함수(single/shard/merge)를 제공하고, <code class="mono">filesystem</code> 주입으로 로컬·GCS를 같은 코드로 처리합니다. 대량 생성은 shard로 쪼개 병렬 실행 후 merge.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">일별 실행, 샤딩·병합, 경로 조립, filesystem 주입</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">생성 로직 자체(<em>pipeline</em>에 위임), 스케줄(<em>DAG</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>partition_date</code>, youtube/virtual_users 경로, 튜닝 파라미터</dd></div>
+          <dt>OUT</dt><dd><code>dict</code> summary + action_log 파티션</dd>
+          <hr>
+          <dt>계약</dt><dd><code>run_daily_action_log(...)</code> · <code>run_daily_action_log_shard(...)</code> · <code>merge_daily_action_log_shards(...)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>공개 경계. 시그니처 변경 시 <span class="dep">dags/youtube_action_log_daily · jobs/action_log</span> 두 호출부 동시 수정.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>observability<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">생성 과정을 들여다보는 계측 계층.</span> 대량 생성이 오래 걸리므로, 진행률과 병목 구간을 구조화된 telemetry로 내보내 어디서 느린지 관측할 수 있게 합니다. 데이터 자체는 건드리지 않는 관측 전용.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">진행률·병목 구조화 로깅, 이벤트 emit</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">데이터 생성·변형(관측만)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>work log context, 이벤트</dd></div>
+          <dt>OUT</dt><dd>구조화 로그 emit</dd>
+          <hr>
+          <dt>계약</dt><dd><code>ActionLogTelemetryReporter</code> · <code>emit_action_log_event(...)</code> · env <code>ACTION_LOG_TELEMETRY_*</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b><span class="dep">pipeline · llm_generator</span>가 계측 호출. 관측 전용, 데이터 계약 불변.</div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section id="orch" class="stage-orch">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">05</span><h2>jobs · dags</h2></div>
+    <p class="sec-sub">
+      <span class="stage-tag">오케스트레이션</span>
+      <span class="sec-role"><b>담당 영역 —</b> 위 순수 로직들을 <b>"언제·어떻게 실행할지"</b>만 책임지는 얇은 진입점 계층. 실제 일은 하나도 하지 않고 패키지 함수에 위임하며, 매일 정해진 시각에 파이프라인을 돌리거나(Airflow) 컨테이너에서 배치로 실행(CLI)합니다.</span>
+    </p>
+    <div class="cards">
+
+      <article class="card">
+        <div class="card-top"><h3>jobs/action_log<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">컨테이너에서 액션 로그 생성을 돌리는 공개 CLI.</span> KPO/배치 잡의 entrypoint로, GCS 경로만 받아 <code class="mono">action_logs.daily</code>를 호출하고 결과를 한 줄 JSON으로 내보냅니다. 인자 검증과 종료코드가 외부 실행 계약.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">CLI 인자 파싱·검증, GCS 경로 정규화, 종료코드(0/1/2)</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">생성 로직(<em>action_logs</em>에 전량 위임)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>CLI argv (<code>--mode {single,shard,merge}</code>, <code>gs://</code> 경로)</dd></div>
+          <dt>OUT</dt><dd>한 줄 JSON <code>job_summary</code> + 종료코드</dd>
+          <hr>
+          <dt>계약</dt><dd><code>BATCH_CONTRACT_VERSION="batch-contract-v1"</code> · <code>main(argv) -> int</code> · mode별 필수/금지 인자</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>CLI 인자/종료코드는 외부 컨테이너 실행 계약. <span class="dep">action_logs.daily</span>에 위임.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>youtube_trending_kr_daily<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">매일 트렌딩 수집을 켜는 스케줄 래퍼.</span> 정해진 시각에 client+fetch+load를 엮어 KR 트렌딩 ~200개를 레이크에 append합니다. 수집이 고갈되면 잡을 실패 처리.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">스케줄링, env 주입, 수집→적재 오케스트레이션</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">수집·정규화·적재 로직(패키지 위임)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>env <code>YOUTUBE_API_KEYS · LAKE_BUCKET · PROXY_URL</code></dd></div>
+          <dt>OUT</dt><dd><code>data_lake/youtube_trending_kr/dt=…</code></dd>
+          <hr>
+          <dt>계약</dt><dd>스케줄 <code>30 15 * * *</code> (KST 00:30) · <code>retries=2</code> · <code>CollectionExhausted → AirflowFailException</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b><span class="dep">client · fetch · load</span> 결합. 얇은 래퍼라 로직 변경은 패키지에서.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>youtube_action_log_daily<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">매일 클릭 로그 합성을 켜는 스케줄 래퍼.</span> 수집 DAG 이후 실행되어, 같은 날짜의 트렌딩 파티션과 가상 유저 parquet을 <code class="mono">run_daily_action_log</code>에 넘겨 액션 로그를 생성합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">스케줄링(수집 이후), env→파라미터 매핑, daily 호출</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">합성 로직(<em>action_logs.daily</em> 위임)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>env <code>YOUTUBE_LAKE_BUCKET · ACTION_LOG_*</code></dd></div>
+          <dt>OUT</dt><dd><code>data_lake/action_log/dt=…</code></dd>
+          <hr>
+          <dt>계약</dt><dd>스케줄 <code>0 16 * * *</code> (KST 01:00) · <code>retries=3</code> · <code>run_daily_action_log(...)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>수집 DAG 이후 실행 순서 의존. <span class="dep">action_logs.daily</span> 시그니처와 결합.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>youtube_backfill_kr<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">과거 데이터를 채우는 수동 트리거 DAG.</span> 스케줄 없이 필요할 때만 돌려, Kaggle 덤프에서 KR 과거 트렌딩을 레이크에 소급 적재합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">수동 트리거, 소스/대상 경로 params 노출, backfill 호출</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">적재 로직(<em>backfill</em> 위임)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>params <code>{source_path, base_path}</code> · env <code>YOUTUBE_BACKFILL_SOURCE</code></dd></div>
+          <dt>OUT</dt><dd>KR dt 파티션</dd>
+          <hr>
+          <dt>계약</dt><dd>스케줄 <code>None</code> (1회성) · <code>backfill_from_parquet(...)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>1회성 경로. <span class="dep">backfill</span>에 위임, 하류 영향 제한적.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>math_utils<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">독립 산술 유틸 (스캐폴딩).</span> <code class="mono">add(a, b)</code> 하나뿐인 사실상 플레이스홀더로, 파이프라인 어느 모듈도 참조하지 않습니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">덧셈 헬퍼 1개</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">파이프라인 로직 일체 (미참조)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>a, b</code></dd></div>
+          <dt>OUT</dt><dd><code>a + b</code></dd>
+          <hr>
+          <dt>계약</dt><dd><code>add(a, b)</code> — 공개 함수 1개, import 없음</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>독립 유틸. 사실상 없음.</div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section id="train" class="stage-train">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">06</span><h2>src/ CTR 학습 · feature_repo</h2></div>
+    <p class="sec-sub">
+      <span class="stage-tag">학습 스택</span>
+      <span class="sec-role"><b>담당 영역 —</b> 합성된 클릭 로그를 받아 <b>실제 CTR 예측 모델(LightGBM)을 학습·평가</b>하는 마지막 단계와, 온라인 서빙용 피처 스토어(Feast). <b>현재 main에 미추적</b>인 별도 스택(<code>refactor/82-src-layout</code> Phase 2)으로, 데이터 생성 <code>autoresearch/</code>와 분리됩니다.</span>
+    </p>
+    <div class="cards">
+
+      <article class="card">
+        <div class="card-top"><h3>pipeline/build_training_dataset<span class="path">.py</span></h3><span class="sev high">영향 높음</span></div>
+        <p class="role"><span class="lead">로그를 학습 테이블로 바꾸는 피처 엔지니어링.</span> 이벤트 로그와 원본(영상·페르소나)을 DuckDB SQL로 조인하되, 데이터 누수를 막기 위해 <b>클릭 시점 이전(過去)만</b> 참조하는 point-in-time 집계로 16컬럼 학습 테이블을 만듭니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">point-in-time 조인, 7일 윈도우 집계, 라벨(clicked) 부착</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">모델 학습(<em>train</em>), 피처 함수 정의(<em>feature_builder</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>data/raw/youtube_videos.csv · personas.csv</code>, <code>events.csv</code></dd></div>
+          <dt>OUT</dt><dd><code>training_dataset.csv</code> (16컬럼)</dd>
+          <hr>
+          <dt>계약</dt><dd>과거(<code>timestamp &lt; e.timestamp</code>)만 참조 · <code>historical_category_affinity</code> 최빈 카테고리</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>출력 16컬럼은 <span class="dep">train · evaluate · config.yaml</span> 계약. ⚠︎ 현재 CLI와 <code>main()</code> 시그니처 불일치 존재.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>pipeline/train<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">모델을 실제로 학습시키는 단계.</span> 데이터를 train/val/test 3분할(test는 완전 격리)하고, 클래스 불균형을 보정(<code class="mono">scale_pos_weight</code>)해 LightGBM을 학습한 뒤 모델·피처목록·held-out 테스트셋을 저장합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">3-way split, 불균형 보정, LGBM 학습, 아티팩트 저장</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">피처 생성(<em>build_training_dataset</em>), 평가(<em>evaluate</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>training_dataset.csv</code>, <code>config.yaml</code></dd></div>
+          <dt>OUT</dt><dd><code>lgbm_model.joblib</code>, <code>feature_columns.pkl</code>, <code>test_set.csv</code></dd>
+          <hr>
+          <dt>계약</dt><dd><code>scale_pos_weight=auto</code> · <code>union_categoricals</code> dtype 정렬 · test 별도 저장(leakage 방지)</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>모델 아티팩트 계약은 <span class="dep">evaluate · utils/model_utils</span>가 소비.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>pipeline/evaluate<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">학습된 모델의 성적표.</span> train이 격리 저장한 held-out 테스트셋으로만 모델을 평가해 ROC-AUC·PR-AUC·Log Loss를 내고, baseline(로지스틱 회귀)과 비교합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">held-out 평가, 지표 산출, baseline 비교</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">학습·튜닝(<em>train</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>lgbm_model.joblib</code>, <code>test_set.csv</code></dd></div>
+          <dt>OUT</dt><dd>ROC-AUC / PR-AUC / Log Loss</dd>
+          <hr>
+          <dt>계약</dt><dd>train이 분리 저장한 held-out만 사용(leakage 방지)</dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>파이프라인 말단. 하류 소비자 없음.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>features/feature_builder<span class="path">.py</span></h3><span class="sev mid">영향 중간</span></div>
+        <p class="role"><span class="lead">유저×영상 상호작용 피처 계산기.</span> "유저 관심사와 영상 카테고리가 얼마나 맞는가" 같은 상호작용 피처를 계산합니다. 학습과 서빙이 <b>같은 함수</b>를 써서 training-serving skew를 막는 게 핵심.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">카테고리 매치·topic_similarity 등 상호작용 피처 계산</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">데이터 조인·집계(<em>build_training_dataset</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>유저 키워드, category_id, 카테고리 임베딩</dd></div>
+          <dt>OUT</dt><dd>match flags, <code>topic_similarity ∈ [0,1]</code></dd>
+          <hr>
+          <dt>계약</dt><dd><code>compute_topic_similarity(...)</code> · <code>compute_*_category_match(...)</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>같은 함수를 <span class="dep">scaffold 02_(라벨 생성)</span>가 재사용 — 라벨/피처 신호 정합 필수(#73). ⚠︎ <code>embed_text</code>는 해시 placeholder.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>models/lgbm_model · utils<span class="path">.py</span></h3><span class="sev low">영향 낮음</span></div>
+        <p class="role"><span class="lead">모델 래퍼 + 저장/로드 유틸.</span> LightGBM 이진 분류기를 프로젝트 인터페이스로 감싸고, 학습된 모델과 피처 목록을 파일로 저장·복원합니다.</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">LGBM fit/predict 래핑, joblib·pickle 저장/로드</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">분할·평가 흐름(<em>train/evaluate</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd><code>X_train, y_train</code> / 모델 객체</dd></div>
+          <dt>OUT</dt><dd><code>predict_proba</code> / joblib·pickle 아티팩트</dd>
+          <hr>
+          <dt>계약</dt><dd><code>LGBMModel(scale_pos_weight, ...)</code> · <code>save/load_model</code> · <code>save/load_feature_columns</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b><span class="dep">train · evaluate</span>가 소비. 하이퍼파라미터 인터페이스 변경 시 config 연동.</div>
+      </article>
+
+      <article class="card">
+        <div class="card-top"><h3>feature_repo/feature_definitions<span class="path">.py</span></h3><span class="sev high">영향 높음</span></div>
+        <p class="role"><span class="lead">온라인 서빙용 피처 스토어(Feast) 정의.</span> 학습 때 쓴 피처를 실시간 추론에서도 낮은 지연으로 꺼내 쓰도록, Entity(user/video/category)와 FeatureView를 정의합니다(BigQuery offline + Redis online).</p>
+        <div class="scope">
+          <p class="does"><span class="tag">담당</span><span class="txt">Entity·FeatureView 정의, offline/online 소스 매핑</span></p>
+          <p class="nots"><span class="tag">비담당</span><span class="txt">피처 값 계산(<em>feature_builder</em>), 학습(<em>train</em>)</span></p>
+        </div>
+        <dl class="io">
+          <div class="in" style="display:contents"><dt>IN</dt><dd>BigQuery 소스 테이블 · env <code>GCP_PROJECT_ID · BQ_DATASET</code></dd></div>
+          <dt>OUT</dt><dd>Entity 3종 + FeatureView 4종</dd>
+          <hr>
+          <dt>계약</dt><dd><code>project: autoresearch_feature_store</code>(변경 금지) · <code>entity_key_serialization_version: 3</code> · <code>timestamp_field="event_timestamp"</code></dd>
+        </dl>
+        <div class="impact"><b>수정 시 영향</b>FeatureView 필드는 온라인/오프라인 조회 계약. 격리 설치 <code>uv sync --only-group feast</code>. 현재 더미 스키마.</div>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<section id="contracts">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">07</span><h2>스테이지 간 데이터 계약</h2></div>
+    <p class="sec-sub">모듈 경계를 넘는 handoff는 대부분 parquet입니다. 아래가 스테이지 사이에서 반드시 유지돼야 하는 인터페이스로, <b>여기가 깨지면 하류 스테이지가 조용히 실패</b>합니다.</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>생산자 → 소비자</th><th>아티팩트 / 경로</th><th>계약 (깨지면 안 되는 것)</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="from-to">youtube_collection.load → action_logs.video_source</span></td>
+            <td><span class="mono">data_lake/youtube_trending_kr/dt=YYYY-MM-DD/part-0.parquet</span></td>
+            <td><code>TrendingVideo</code> 29컬럼 고정 스키마 · <code>dt=</code> hive 단일키 · ts=us/UTC</td>
+          </tr>
+          <tr>
+            <td><span class="from-to">virtual_users.pipeline → action_logs.pipeline</span></td>
+            <td><span class="mono">asset/virtual_user/*.parquet</span></td>
+            <td><code>user_id</code> 키 컬럼 · <code>to_pylist()</code> 직접 소비(어댑터 없음) · 33필드</td>
+          </tr>
+          <tr>
+            <td><span class="from-to">action_logs.pipeline → src/ CTR 학습</span></td>
+            <td><span class="mono">data_lake/action_log/dt=…/part-0.parquet</span></td>
+            <td><code>EventLog</code> 12컬럼 long-format · <code>event_type ∈ {impression,click,view,like}</code> · <code>clicked</code>는 join 파생</td>
+          </tr>
+          <tr>
+            <td><span class="from-to">client ↔ proxy/app</span></td>
+            <td><span class="mono">GET {proxy_url}/youtube/v3/{resource}</span></td>
+            <td>경로 화이트리스트 + <code>X-Goog-Api-Key</code> 헤더 · <code>key</code> query 금지(마스킹 불변량)</td>
+          </tr>
+          <tr>
+            <td><span class="from-to">action_logs.daily ↔ {dags, jobs.action_log}</span></td>
+            <td><span class="mono">run_daily_action_log / _shard / merge_*</span></td>
+            <td>함수 시그니처 + <code>filesystem</code> 주입 규약 · CLI <code>batch-contract-v1</code></td>
+          </tr>
+          <tr>
+            <td><span class="from-to">build_training_dataset → {train, evaluate, config.yaml}</span></td>
+            <td><span class="mono">training_dataset.csv (16컬럼)</span></td>
+            <td>컬럼 집합 = <code>config.yaml:feature_columns</code> + <code>clicked</code> · categorical 컬럼 정렬</td>
+          </tr>
+          <tr>
+            <td><span class="from-to">features.feature_builder ↔ scaffold 02_event_log</span></td>
+            <td><span class="mono">compute_topic_similarity(...)</span></td>
+            <td>라벨 생성과 학습 피처가 <b>같은 함수</b> 사용 — 신호 정합 필수(#73 회귀)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Autoresearch · 모듈 아키텍처 맵</span>
+    <span>·</span>
+    <span>출처: <code>autoresearch/</code>, <code>src/</code>, <code>dags/</code>, <code>proxy/</code>, <code>feature_repo/</code> 정적 분석</span>
+    <span>·</span>
+    <span>스키마 계약이 유일한 진실: <code>*/schema.py</code></span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('themeBtn');
+    function current() {
+      if (root.dataset.theme) return root.dataset.theme;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    btn.addEventListener('click', function () {
+      var next = current() === 'dark' ? 'light' : 'dark';
+      root.dataset.theme = next;
+    });
+  })();
+</script>
+
+</body>
+</html>

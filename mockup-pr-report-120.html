@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PR #120 · 이해 리포트 (목업)</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  body{margin:0}
+  h1,h2,h3,h4,p,ul,dl,dd{margin:0}
+  ul{padding:0;list-style:none}
+
+  :root{
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --bg:#eceff4; --surface:#fff; --surface-2:#f4f7fb; --border:#d5dce6; --border-strong:#b9c3d1;
+    --text:#17202e; --text-dim:#4d5968; --text-faint:#808b9b;
+    --accent:#0e7c92; --accent-soft:#d6eef2; --accent-ink:#0a5b6b;
+    --s-collect:#0891b2; --s-vu:#7c5cff; --s-action:#c2740a; --s-train:#0f9d6b;
+    --ok:#12924f; --ok-bg:#d9f2e2; --warn:#c2740a; --warn-bg:#fbeed6; --info:#0e7c92; --info-bg:#d6eef2;
+    --radius:12px; --radius-sm:7px;
+    --shadow:0 1px 2px rgba(20,30,45,.05), 0 10px 28px -16px rgba(20,30,45,.28);
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#0a0f17; --surface:#131b28; --surface-2:#0f1622; --border:#263140; --border-strong:#35455a;
+    --text:#e5ecf4; --text-dim:#9aa7b8; --text-faint:#64717f;
+    --accent:#2bcbe4; --accent-soft:#10303a; --accent-ink:#7fe3f2;
+    --s-collect:#38bdd8; --s-vu:#a48bff; --s-action:#e69a3c; --s-train:#34c98a;
+    --ok:#47c584; --ok-bg:#10301f; --warn:#e6a24a; --warn-bg:#33260f; --info:#2bcbe4; --info-bg:#10303a;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.7);
+  }}
+  :root[data-theme="light"]{
+    --bg:#eceff4;--surface:#fff;--surface-2:#f4f7fb;--border:#d5dce6;--border-strong:#b9c3d1;
+    --text:#17202e;--text-dim:#4d5968;--text-faint:#808b9b;--accent:#0e7c92;--accent-soft:#d6eef2;--accent-ink:#0a5b6b;
+    --s-collect:#0891b2;--s-vu:#7c5cff;--s-action:#c2740a;--s-train:#0f9d6b;
+    --ok:#12924f;--ok-bg:#d9f2e2;--warn:#c2740a;--warn-bg:#fbeed6;--info:#0e7c92;--info-bg:#d6eef2;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0a0f17;--surface:#131b28;--surface-2:#0f1622;--border:#263140;--border-strong:#35455a;
+    --text:#e5ecf4;--text-dim:#9aa7b8;--text-faint:#64717f;--accent:#2bcbe4;--accent-soft:#10303a;--accent-ink:#7fe3f2;
+    --s-collect:#38bdd8;--s-vu:#a48bff;--s-action:#e69a3c;--s-train:#34c98a;
+    --ok:#47c584;--ok-bg:#10301f;--warn:#e6a24a;--warn-bg:#33260f;--info:#2bcbe4;--info-bg:#10303a;
+  }
+
+  body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:0 clamp(16px,4vw,32px)}
+  code,.mono{font-family:var(--font-mono)}
+
+  /* mockup banner */
+  .banner{background:var(--warn-bg);color:var(--warn);border-bottom:1px solid var(--border);
+    font:600 12px/1 var(--font-mono);letter-spacing:.03em;text-align:center;padding:8px}
+
+  /* PR header */
+  .pr-head{padding:26px 0 18px}
+  .pr-kicker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font:600 12px/1 var(--font-mono);color:var(--text-faint)}
+  .pr-kicker .num{color:var(--accent);font-weight:700}
+  .pr-kicker .merged{color:var(--s-vu);background:color-mix(in srgb,var(--s-vu) 14%,transparent);padding:4px 8px;border-radius:999px}
+  h1{font-size:clamp(21px,3.4vw,29px);font-weight:750;letter-spacing:-.02em;margin-top:12px;text-wrap:balance}
+  .pr-meta{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px 14px;font:500 12.5px/1 var(--font-mono);color:var(--text-dim)}
+  .pr-meta a{color:var(--accent)}
+
+  /* TL;DR */
+  .tldr{margin:8px 0 24px;padding:15px 17px;background:var(--surface);border:1px solid var(--border);
+    border-left:3px solid var(--s-action);border-radius:var(--radius);box-shadow:var(--shadow);font-size:15px}
+  .tldr b{color:var(--s-action)}
+
+  section{padding:18px 0}
+  .h{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+  .h h2{font-size:15px;font-weight:700;letter-spacing:.01em}
+  .h .tag{font:600 9.5px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text-faint);
+    border:1px solid var(--border);padding:4px 7px;border-radius:999px}
+
+  /* focus flow */
+  .flow-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
+  .stages{display:flex;align-items:center;gap:6px;overflow-x:auto;padding-bottom:4px}
+  .stage{flex:1 0 auto;min-width:96px;text-align:center;padding:9px 8px;border-radius:var(--radius-sm);
+    border:1px solid var(--border);background:var(--surface-2);font:600 12px/1.2 var(--font-mono);color:var(--text-faint);opacity:.55}
+  .stage.on{opacity:1;color:#fff;background:var(--s-action);border-color:var(--s-action);
+    box-shadow:0 0 0 3px color-mix(in srgb,var(--s-action) 30%,transparent)}
+  .stage small{display:block;font-weight:500;font-size:9.5px;margin-top:3px;opacity:.85}
+  .arw{color:var(--text-faint);flex:0 0 auto;font-size:14px}
+
+  .zoom-label{margin:16px 0 9px;font:600 10.5px/1 var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--s-action)}
+  .mods{display:flex;flex-wrap:wrap;gap:8px}
+  .mod{font:600 12px/1 var(--font-mono);padding:8px 11px;border-radius:999px;border:1px solid var(--border);
+    background:var(--surface-2);color:var(--text-faint);opacity:.5}
+  .mod.hit{opacity:1;color:var(--text);background:var(--surface);border-color:var(--s-action);
+    box-shadow:0 0 0 2px color-mix(in srgb,var(--s-action) 22%,transparent)}
+  .mod.hit::before{content:"◆ ";color:var(--s-action)}
+  .flow-legend{margin-top:14px;font-size:12px;color:var(--text-dim)}
+
+  /* comprehension grid */
+  .cg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:640px){.cg{grid-template-columns:1fr}}
+  .qa{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 15px;box-shadow:var(--shadow)}
+  .qa .k{font:700 10px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--s-action);margin-bottom:8px}
+  .qa .v{font-size:13.5px;color:var(--text)}
+  .qa.span{grid-column:1/-1}
+  .anchor{display:inline-flex;align-items:center;gap:5px;margin-top:9px;font:500 11px/1 var(--font-mono);
+    color:var(--accent-ink);background:var(--accent-soft);padding:4px 8px;border-radius:6px}
+  .anchor::before{content:"⚓";font-size:10px;opacity:.8}
+  .verified{color:var(--ok);background:var(--ok-bg)}
+  .verified::before{content:"✓";font-weight:800}
+  .narrated{color:var(--text-dim);background:var(--surface-2);border:1px solid var(--border)}
+  .narrated::before{content:"◇"}
+
+  /* contract impact */
+  .impact-list{display:flex;flex-direction:column;gap:9px}
+  .row{display:grid;grid-template-columns:150px 1fr auto;gap:12px;align-items:center;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px}
+  @media(max-width:640px){.row{grid-template-columns:1fr;gap:5px}}
+  .row .name{font:600 12px/1.3 var(--font-mono);color:var(--text)}
+  .row .detail{font-size:12.5px;color:var(--text-dim)}
+  .row .detail code{background:var(--surface-2);border:1px solid var(--border);padding:1px 5px;border-radius:5px;font-size:11px}
+  .pill{justify-self:end;font:700 10px/1 var(--font-mono);letter-spacing:.03em;text-transform:uppercase;padding:5px 9px;border-radius:999px;white-space:nowrap}
+  .pill.change{color:var(--warn);background:var(--warn-bg)}
+  .pill.stable{color:var(--ok);background:var(--ok-bg)}
+  .pill.compat{color:var(--info);background:var(--info-bg)}
+
+  /* legend */
+  .keyrow{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--text-dim);
+    background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 14px}
+  .keyrow b{color:var(--text)}
+  .k-v{color:var(--ok)}.k-n{color:var(--text-dim)}
+
+  footer{padding:26px 0 48px;color:var(--text-faint);font-size:12px;border-top:1px solid var(--border);margin-top:24px}
+  footer code{color:var(--text-dim)}
+  .theme-btn{position:fixed;top:44px;right:16px;z-index:9;border:1px solid var(--border);background:var(--surface);
+    color:var(--text-dim);border-radius:999px;width:34px;height:34px;cursor:pointer;font-size:15px}
+</style>
+</head>
+<body>
+
+<div class="banner">◐ 이해 리포트 목업 — 실제 PR #120 (커밋 3be5fae)의 diff에서 추출한 데이터로 구성</div>
+<button class="theme-btn" id="themeBtn" aria-label="테마 전환">◐</button>
+
+<div class="wrap">
+
+  <div class="pr-head">
+    <div class="pr-kicker">
+      <span class="num">PR #120</span>
+      <span>·</span>
+      <span>action_logs</span>
+      <span class="merged">merged → main</span>
+    </div>
+    <h1>후보 24행과 인덱스를 프롬프트에 명시합니다</h1>
+    <div class="pr-meta">
+      <span>@bbungjun</span>
+      <span>연결 이슈 <a href="#">#118 · #119</a></span>
+      <span>6 파일 · +75 −19</span>
+    </div>
+  </div>
+
+  <div class="tldr">
+    이 PR은 <b>[클릭 로그 합성]</b> 스테이지에서 <b>LLM 프롬프트의 후보 표현</b>을 바꿉니다.
+    프롬프트 계약이 <code>v3 → v4</code>로 올라갔지만, <b>이벤트 저장 스키마(v1)와 상·하류 데이터 계약은 그대로</b>입니다.
+    함께 QA용 <code>max_users</code> 옵션이 추가됐고(하위호환), 테스트 2개가 커버합니다.
+  </div>
+
+  <section>
+    <div class="h"><h2>어디에 · 흐름 위치</h2><span class="tag">auto</span></div>
+    <div class="flow-card">
+      <div class="stages">
+        <div class="stage"><span>가상 유저</span><small>virtual_users</small></div>
+        <span class="arw">＋</span>
+        <div class="stage"><span>영상 수집</span><small>youtube_collection</small></div>
+        <span class="arw">→</span>
+        <div class="stage on"><span>클릭 로그 합성</span><small>action_logs ◆</small></div>
+        <span class="arw">→</span>
+        <div class="stage"><span>CTR 학습</span><small>src / feature_repo</small></div>
+      </div>
+
+      <div class="zoom-label">action_logs 내부 — 이 PR이 만진 모듈</div>
+      <div class="mods">
+        <span class="mod hit">llm_generator</span>
+        <span class="mod hit">daily</span>
+        <span class="mod hit">schema</span>
+        <span class="mod">pipeline</span>
+        <span class="mod">candidate</span>
+        <span class="mod">video_source</span>
+        <span class="mod">observability</span>
+      </div>
+      <p class="flow-legend">
+        변경은 <b>action_logs 내부의 "두뇌(llm_generator)"와 "실행 창구(daily)"</b>에 국한됩니다.
+        후보를 만드는 <code>candidate</code>, 합성 본체 <code>pipeline</code>, 상류 입력 <code>video_source</code>는 건드리지 않았습니다.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="h"><h2>무엇을 · 왜 · 담당 경계</h2><span class="tag">auto + 서술</span></div>
+    <div class="cg">
+      <div class="qa">
+        <div class="k">무엇을</div>
+        <div class="v">LLM에 넘기는 후보 영상 목록의 각 행 첫 원소에 <b>명시적 index</b>를 추가하고, 컬럼 계약에 <code>index</code>를 포함시켰습니다.</div>
+        <span class="anchor">llm_generator.py:72 · CANDIDATE_COLUMNS</span>
+      </div>
+      <div class="qa">
+        <div class="k">왜</div>
+        <div class="v">토큰 절약용 위치기반 직렬화가 <b>index를 생략</b>해, 응답 정렬이 배열 위치에만 의존했습니다. 첫 원소에 index를 실어 정렬을 견고하게 만듭니다.</div>
+        <span class="anchor narrated">diff 주석 + 커밋 메시지 기반</span>
+      </div>
+      <div class="qa">
+        <div class="k">함께 (부수 변경)</div>
+        <div class="v">QA·제한 실행을 위해 <code>run_daily_action_log</code>에 <b><code>max_users</code></b> 옵션을 추가해 상위 N명만 처리하도록 했습니다.</div>
+        <span class="anchor">daily.py:722 · +max_users</span>
+      </div>
+      <div class="qa">
+        <div class="k">담당 경계</div>
+        <div class="v"><b>프롬프트 표현·실행 옵션만</b> 변경. 이벤트 저장 스키마와 유저/영상 입력 계약은 손대지 않았습니다.</div>
+        <span class="anchor verified">검증됨 · ACTION_LOG_SCHEMA_VERSION 무변경 (schema.py:16)</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="h"><h2>계약 &amp; 영향</h2><span class="tag">auto</span></div>
+    <div class="impact-list">
+      <div class="row">
+        <div class="name">PROMPT_VERSION</div>
+        <div class="detail"><code>action_log_ctr_v3</code> → <code>v4</code> · 프롬프트 출력 세대 변경. 과거 로그와 버전으로 구분됨 <span style="opacity:.7">(schema.py:17)</span></div>
+        <span class="pill change">변경 · 비파괴</span>
+      </div>
+      <div class="row">
+        <div class="name">ACTION_LOG_SCHEMA_VERSION</div>
+        <div class="detail"><code>action_log_schema_v1</code> 그대로 · 이벤트 로그 parquet 12컬럼 스키마 불변 → 하류 CTR 학습 영향 없음 <span style="opacity:.7">(schema.py:16)</span></div>
+        <span class="pill stable">불변 · 검증됨</span>
+      </div>
+      <div class="row">
+        <div class="name">run_daily_action_log()</div>
+        <div class="detail">선택 인자 <code>max_users: int|None=None</code> 추가 · 기본값 유지로 기존 호출 안전 <span style="opacity:.7">(daily.py:722)</span></div>
+        <span class="pill compat">공개 API · 하위호환</span>
+      </div>
+      <div class="row">
+        <div class="name">교차 레포 (airflow)</div>
+        <div class="detail"><code>Autoresearch-airflow</code>가 소비하는 CLI 계약 <code>batch-contract-v1</code> — 선택 인자 추가라 v1 내 호환. airflow가 <code>--max-users</code>를 쓰려면 별도 전환 PR(비필수)</div>
+        <span class="pill compat">계약 v1 유지</span>
+      </div>
+      <div class="row">
+        <div class="name">테스트</div>
+        <div class="detail"><code>test_action_logs_daily.py</code> +27 · <code>test_action_logs_llm_generator.py</code> +25 — 변경 동작 커버</div>
+        <span class="pill stable">커버됨</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="h"><h2>이 리포트를 읽는 법</h2></div>
+    <div class="keyrow">
+      <span><span class="anchor verified" style="margin:0">검증됨</span> &nbsp;<b>추출기가 코드에서 확인</b>한 사실 (믿어도 됨)</span>
+      <span><span class="anchor narrated" style="margin:0">서술</span> &nbsp;<b>LLM이 diff·이슈로 작성</b> — 근거 링크로 검증 가능</span>
+      <span><span class="anchor" style="margin:0">⚓ 앵커</span> &nbsp;모든 주장은 <code>file:line</code>으로 원본에 연결</span>
+    </div>
+  </section>
+
+  <footer>
+    <div>이해 리포트 <b>목업</b> · 전체 아키텍처 맵의 "PR 줌" 뷰 — 같은 데이터 모델을 PR 단위로 초점화</div>
+    <div style="margin-top:6px">데이터 출처: 실제 커밋 <code>3be5fae</code> diff · "왜"·이슈 연결은 서술 예시 (실제 파이프라인에선 연결 이슈 본문에서 추출)</div>
+  </footer>
+
+</div>
+
+<script>
+  (function(){var r=document.documentElement,b=document.getElementById('themeBtn');
+   function cur(){return r.dataset.theme||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}
+   b.addEventListener('click',function(){r.dataset.theme=cur()==='dark'?'light':'dark'})})();
+</script>
+
+</body>
+</html>
