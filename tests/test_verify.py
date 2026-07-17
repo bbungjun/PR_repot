@@ -169,6 +169,22 @@ def test_breaking_signature_never_verified_even_if_symbol_also_unchanged():
     assert all(c["status"] != VERIFIED for c in warning_ones)
 
 
+def test_cross_stage_same_filename_not_falsely_covered():
+    # 회귀 재현 테스트(이번 수정의 핵심 대상): 이 레포에는 schema.py가
+    # action_logs/virtual_users/youtube_collection 세 스테이지에 동시에 존재한다.
+    # 마지막 구성요소("schema")만 대조하면 action_logs.schema가 완전히 무관한
+    # virtual_users 스테이지의 test_virtual_users_schema.py 변경만으로 "테스트
+    # 커버됨" 초록을 받는다 — 이 레포에는 tests/test_action_logs_schema.py가
+    # 존재조차 하지 않으므로 이는 명백한 허위 초록이다. 패키지 토큰이 하나도
+    # 겹치지 않으므로(action/logs vs virtual/users) warning이어야 한다.
+    d = _delta()
+    d["changed_modules"][0]["public_surface_changed"] = True  # action_logs.schema
+    d["tests"]["files"] = ["tests/test_virtual_users_schema.py"]
+    claims = build_claims(d)
+    hit = [c for c in claims if c["module"] == "action_logs.schema" and "테스트" in c["text"]]
+    assert hit and hit[0]["status"] == WARNING
+
+
 def test_schema_change_status_depends_only_on_breaking_flag_not_change_value():
     # schema_changes 판정은 change 값("added"/"removed")이 아니라 오직 breaking
     # 플래그에만 의존해야 한다. added+breaking=True는 warning, removed+breaking=False는

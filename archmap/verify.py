@@ -23,23 +23,44 @@ def _claim(status: str, text: str, module: str | None = None, line: int | None =
 
 
 def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
-    # 모듈 id의 마지막 구성요소만 대조한다 — 패키지명 대조는 같은 패키지의
-    # 무관한 테스트 변경을 "커버됨"으로 오판한다(허위 초록 금지).
-    # 대조는 부분 문자열이 아니라 단어 경계(토큰) 단위로 한다: mod_name과 stem을
-    # 각각 "_" 기준으로 토큰화한 뒤, mod_name의 토큰 리스트가 stem의 토큰 리스트에
-    # "연속된 부분열(contiguous sublist)"로 나타날 때만 커버된 것으로 본다.
-    # 단일 토큰과의 완전 일치 비교(mod_name in stem.split("_"))는 mod_name 자체가
-    # "llm_generator"처럼 언더스코어로 여러 단어를 잇는 경우, 그 문자열이 토큰
-    # 리스트의 원소가 될 수 없어 영원히 매칭에 실패한다(허위 warning 회귀).
-    # 부분 문자열 대조("log" in "action_logs_daily")는 반대로 짧은 모듈명이
-    # 무관한 테스트 파일명에 우연히 포함되는 경우까지 커버됨으로 오판해 허위
-    # 초록을 만든다. 연속 부분열 대조는 두 문제를 모두 피한다.
-    mod_tokens = module_id.rsplit(".", 1)[-1].split("_")
+    # 이 판정은 이미 두 번 고쳐졌다(마지막 구성요소만 대조하도록 좁혀졌다가,
+    # 스테이지를 넘나드는 오매칭을 냈다):
+    #   1) 부분 문자열 대조("log" in "action_logs_daily") → 짧은 모듈명이 무관한
+    #      테스트 파일명에 우연히 포함되어 허위 초록.
+    #   2) 단일 토큰 완전 일치(mod_name in stem.split("_")) → "llm_generator"처럼
+    #      언더스코어로 여러 단어를 잇는 모듈명은 토큰 리스트의 원소가 될 수 없어
+    #      영원히 매칭 실패(허위 warning 회귀).
+    #   3) 연속 부분열 대조(마지막 구성요소만) → 1)·2)는 해결했으나 패키지명을
+    #      보지 않아 "schema.py"·"pipeline.py"처럼 여러 스테이지에 동명 파일이
+    #      있으면 서로의 테스트로 오매칭된다(예: action_logs.schema가 무관한
+    #      test_virtual_users_schema.py로 "커버됨" 오판 — 허위 초록).
+    # 그래서 이번에는 두 조건을 모두 요구한다:
+    #   (a) 모듈명(마지막 구성요소)이 stem 토큰열에 연속 부분열로 나타나야 한다
+    #       (기존 조건, 유지 — 1)·2) 재발 방지).
+    #   (b) 패키지 구성요소(마지막을 제외한 나머지, 각각 "_" 토큰화) 중 최소
+    #       하나가 stem 토큰열에 (순서 무관, 부분열 아니어도) 나타나야 한다
+    #       — 다른 스테이지 패키지와는 토큰이 겹칠 수 없으므로 3)의 오매칭을 막는다.
+    # (b)를 완전 일치가 아니라 "토큰 하나라도 겹침"으로 느슨하게 둔 이유: 실제
+    # 파일명 관례가 항상 패키지명을 그대로 쓰지 않는다(예: "action_logs" 패키지의
+    # 테스트가 "test_action_log_llm_generator.py"처럼 단수형 "log"를 쓰는 경우가
+    # 있다). 패키지 토큰 전부 일치를 요구하면 이런 정당한 커버를 허위 경고로
+    # 놓친다. 토큰 하나(예: "action")만 겹쳐도 같은 패키지 계열임을 강하게
+    # 시사하고, 다른 스테이지 패키지명과는 애초에 토큰이 겹치지 않으므로 허위
+    # 초록 위험 없이 이 완화가 안전하다.
+    # 패키지 구성요소가 없는(점이 없는) 최상위 모듈 id는 (b)를 건너뛰고 (a)만으로
+    # 판정한다 — 대조할 패키지명 자체가 없다.
+    parts = module_id.split(".")
+    mod_tokens = parts[-1].split("_")
+    pkg_tokens = {tok for p in parts[:-1] for tok in p.split("_")}
     n = len(mod_tokens)
     for f in test_files:
         stem = f.rsplit("/", 1)[-1].removeprefix("test_").removesuffix(".py")
         stem_tokens = stem.split("_")
-        if any(stem_tokens[i:i + n] == mod_tokens for i in range(len(stem_tokens) - n + 1)):
+        mod_matched = any(
+            stem_tokens[i:i + n] == mod_tokens for i in range(len(stem_tokens) - n + 1))
+        if not mod_matched:
+            continue
+        if not pkg_tokens or pkg_tokens & set(stem_tokens):
             return True
     return False
 
