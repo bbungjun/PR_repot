@@ -1,0 +1,62 @@
+{
+  "schema_version": "archmap-v0",
+  "repo": "Autoresearch",
+  "repo_url": "https://github.com/SKYAHO/Autoresearch",
+  "revision": "3be5fae",
+  "contract_version": "batch-contract-v1",
+  "stages": ["youtube_collection", "virtual_users", "action_logs", "orchestration", "training"],
+  "modules": [
+    {
+      "id": "action_logs.schema",
+      "stage": "action_logs",
+      "path": "autoresearch/action_logs/schema.py",
+      "role": null,
+      "owns": [],
+      "not_owns": [],
+      "public_symbols": [
+        {"name": "EventLog", "kind": "class", "sig": null, "line": 36},
+        {"name": "EventLogBatch", "kind": "class", "sig": null, "line": 223}
+      ],
+      "version_consts": {
+        "ACTION_LOG_SCHEMA_VERSION": {"value": "action_log_schema_v1", "line": 16},
+        "PROMPT_VERSION": {"value": "action_log_ctr_v4", "line": 17}
+      },
+      "schema_fields": {"EventLog": ["event_id", "event_timestamp", "clicked"]},
+      "imports": []
+    },
+    {
+      "id": "action_logs.llm_generator",
+      "stage": "action_logs",
+      "path": "autoresearch/action_logs/llm_generator.py",
+      "role": null,
+      "owns": [],
+      "not_owns": [],
+      "public_symbols": [
+        {"name": "CANDIDATE_COLUMNS", "kind": "const", "sig": null, "line": 72}
+      ],
+      "version_consts": {},
+      "schema_fields": {},
+      "imports": ["action_logs.schema"]
+    },
+    {
+      "id": "action_logs.daily",
+      "stage": "action_logs",
+      "path": "autoresearch/action_logs/daily.py",
+      "role": null,
+      "owns": [],
+      "not_owns": [],
+      "public_symbols": [
+        {"name": "run_daily_action_log", "kind": "function",
+         "sig": "(request, generator, max_users=None)", "line": 722}
+      ],
+      "version_consts": {},
+      "schema_fields": {},
+      "imports": ["action_logs.llm_generator", "action_logs.schema"]
+    }
+  ],
+  "contracts": [
+    {"name": "batch-contract-v1", "module": "jobs.action_log",
+     "cli_args": ["--mode", "--partition-date", "--max-users", "--generator-name"],
+     "consumed_by": ["Autoresearch-airflow"]}
+  ]
+}

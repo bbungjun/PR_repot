@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "architecture",
+  "type": "object",
+  "required": ["schema_version", "repo", "revision", "stages", "modules", "contracts"],
+  "properties": {
+    "schema_version": {"const": "archmap-v0"},
+    "repo": {"type": "string"},
+    "repo_url": {"type": "string"},
+    "revision": {"type": "string"},
+    "contract_version": {"type": "string"},
+    "stages": {"type": "array", "items": {"type": "string"}},
+    "modules": {"type": "array", "items": {"$ref": "#/$defs/module"}},
+    "contracts": {"type": "array", "items": {"$ref": "#/$defs/contract"}}
+  },
+  "$defs": {
+    "module": {
+      "type": "object",
+      "required": ["id", "stage", "path", "public_symbols", "version_consts", "schema_fields", "imports"],
+      "properties": {
+        "id": {"type": "string"},
+        "stage": {"type": "string"},
+        "path": {"type": "string"},
+        "role": {"type": ["string", "null"]},
+        "owns": {"type": "array", "items": {"type": "string"}},
+        "not_owns": {"type": "array", "items": {"type": "string"}},
+        "public_symbols": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "kind", "line"],
+            "properties": {
+              "name": {"type": "string"},
+              "kind": {"enum": ["function", "class", "const"]},
+              "sig": {"type": ["string", "null"]},
+              "line": {"type": "integer"}
+            }
+          }
+        },
+        "version_consts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["value", "line"],
+            "properties": {"value": {"type": "string"}, "line": {"type": "integer"}}
+          }
+        },
+        "schema_fields": {
+          "type": "object",
+          "additionalProperties": {"type": "array", "items": {"type": "string"}}
+        },
+        "imports": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "contract": {
+      "type": "object",
+      "required": ["name", "cli_args"],
+      "properties": {
+        "name": {"type": "string"},
+        "module": {"type": "string"},
+        "cli_args": {"type": "array", "items": {"type": "string"}},
+        "consumed_by": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+[project]
+name = "archmap"
+version = "0.1.0"
+description = "PR 이해 리포트 & 살아있는 아키텍처 맵 — 중립 라이브 서버"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "jinja2>=3.1",
+    "jsonschema>=4.21",
+    "streamlit>=1.36",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    {include-group = "lint"},
+]
+lint = ["ruff==0.15.18"]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

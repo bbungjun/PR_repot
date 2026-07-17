@@ -1,0 +1,33 @@
+{
+  "schema_version": "archmap-v0",
+  "repo": "Autoresearch",
+  "pr": 120,
+  "base_sha": "aaaaaaa",
+  "head_sha": "3be5fae",
+  "issue": {"number": 118, "title": "후보 목록을 프롬프트에 명시", "body_excerpt": "LLM이 후보 인덱스를 혼동하는 문제를 고친다"},
+  "changed_modules": [
+    {"id": "action_logs.schema", "path": "autoresearch/action_logs/schema.py", "stage": "action_logs",
+     "symbols_changed": [], "public_surface_changed": false},
+    {"id": "action_logs.llm_generator", "path": "autoresearch/action_logs/llm_generator.py", "stage": "action_logs",
+     "symbols_changed": [{"name": "CANDIDATE_COLUMNS", "change": "signature", "line": 72}],
+     "public_surface_changed": true},
+    {"id": "action_logs.daily", "path": "autoresearch/action_logs/daily.py", "stage": "action_logs",
+     "symbols_changed": [{"name": "run_daily_action_log", "change": "signature", "line": 722}],
+     "public_surface_changed": true}
+  ],
+  "version_changes": [
+    {"const": "PROMPT_VERSION", "module": "action_logs.schema",
+     "from": "action_log_ctr_v3", "to": "action_log_ctr_v4", "line": 17, "breaking": false}
+  ],
+  "unchanged_contracts": [
+    {"const": "ACTION_LOG_SCHEMA_VERSION", "module": "action_logs.schema",
+     "value": "action_log_schema_v1", "line": 16}
+  ],
+  "schema_changes": [],
+  "cross_repo": [
+    {"contract": "batch-contract-v1", "impact": "optional-arg-added", "breaking": false,
+     "details": "--max-users 선택 인자 추가"}
+  ],
+  "tests": {"files": ["tests/test_action_logs_daily.py", "tests/test_action_log_llm_generator.py"], "lines_added": 52},
+  "sidecar_stale": []
+}

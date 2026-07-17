@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pr-delta",
+  "type": "object",
+  "required": ["schema_version", "repo", "pr", "base_sha", "head_sha", "changed_modules",
+               "version_changes", "unchanged_contracts", "schema_changes", "cross_repo",
+               "tests", "sidecar_stale"],
+  "properties": {
+    "schema_version": {"const": "archmap-v0"},
+    "repo": {"type": "string"},
+    "pr": {"type": "integer"},
+    "base_sha": {"type": "string"},
+    "head_sha": {"type": "string"},
+    "issue": {
+      "type": ["object", "null"],
+      "properties": {
+        "number": {"type": "integer"},
+        "title": {"type": "string"},
+        "body_excerpt": {"type": "string"}
+      }
+    },
+    "changed_modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "stage", "symbols_changed", "public_surface_changed"],
+        "properties": {
+          "id": {"type": "string"},
+          "path": {"type": "string"},
+          "stage": {"type": "string"},
+          "symbols_changed": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "change"],
+              "properties": {
+                "name": {"type": "string"},
+                "change": {"enum": ["added", "removed", "signature"]},
+                "line": {"type": ["integer", "null"]}
+              }
+            }
+          },
+          "public_surface_changed": {"type": "boolean"}
+        }
+      }
+    },
+    "version_changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["const", "module", "from", "to", "breaking"],
+        "properties": {
+          "const": {"type": "string"},
+          "module": {"type": "string"},
+          "from": {"type": ["string", "null"]},
+          "to": {"type": ["string", "null"]},
+          "line": {"type": ["integer", "null"]},
+          "breaking": {"type": "boolean"}
+        }
+      }
+    },
+    "unchanged_contracts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["const", "module", "value"],
+        "properties": {
+          "const": {"type": "string"},
+          "module": {"type": "string"},
+          "value": {"type": "string"},
+          "line": {"type": ["integer", "null"]}
+        }
+      }
+    },
+    "schema_changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["model", "module", "field", "change", "breaking"],
+        "properties": {
+          "model": {"type": "string"},
+          "module": {"type": "string"},
+          "field": {"type": "string"},
+          "change": {"enum": ["added", "removed"]},
+          "breaking": {"type": "boolean"}
+        }
+      }
+    },
+    "cross_repo": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["contract", "impact", "breaking"],
+        "properties": {
+          "contract": {"type": "string"},
+          "impact": {"type": "string"},
+          "breaking": {"type": "boolean"},
+          "details": {"type": "string"}
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "required": ["files", "lines_added"],
+      "properties": {
+        "files": {"type": "array", "items": {"type": "string"}},
+        "lines_added": {"type": "integer"}
+      }
+    },
+    "sidecar_stale": {"type": "array", "items": {"type": "string"}}
+  }
+}
