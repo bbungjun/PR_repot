@@ -1,6 +1,8 @@
 """CI가 보낸 JSON을 받아 리포트를 조립·저장하는 수신 API."""
 from __future__ import annotations
 
+import hmac
+import json
 import os
 from pathlib import Path
 
@@ -19,8 +21,29 @@ def _store() -> Store:
 
 def _check_token(request: Request) -> None:
     expected = os.environ.get("ARCHMAP_TOKEN")
-    if not expected or request.headers.get("X-Archmap-Token") != expected:
+    provided = request.headers.get("X-Archmap-Token")
+    # expected가 없으면 무조건 fail-closed(401). provided가 None일 수 있으므로
+    # hmac.compare_digest에 넘기기 전에 반드시 걸러낸다(넘기면 TypeError).
+    # 토큰은 CI-서버 공유 시크릿이므로 타이밍 사이드채널을 막기 위해
+    # 상수 시간 비교를 사용한다.
+    if not expected or provided is None or not hmac.compare_digest(provided, expected):
         raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다")
+
+
+async def _read_json_object(request: Request) -> dict:
+    """요청 바디를 JSON으로 파싱하고 최상위가 객체인지 확인한다.
+
+    CI 쪽 버그나 손상된 요청이 잘못된 JSON 구문·빈 바디·비-객체 최상위 값을
+    보낼 수 있다. 이런 입력은 서버 결함(500)이 아니라 잘못된 클라이언트
+    요청(400)으로 다뤄야 하는 신뢰 경계이므로 여기서 한 번에 검증한다.
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"잘못된 JSON입니다: {exc}") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="요청 본문은 JSON 객체여야 합니다")
+    return body
 
 
 def create_app() -> FastAPI:
@@ -29,13 +52,18 @@ def create_app() -> FastAPI:
     @app.post("/api/pr-report")
     async def pr_report(request: Request):
         _check_token(request)
-        body = await request.json()
+        body = await _read_json_object(request)
         try:
             architecture, pr_delta = body["architecture"], body["pr_delta"]
             validate_architecture(architecture)
             validate_pr_delta(pr_delta)
-        except (KeyError, jsonschema.ValidationError) as exc:
-            raise HTTPException(status_code=400, detail=f"계약 위반: {exc}") from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=400, detail=f"계약 위반: 누락된 필드 {exc}") from exc
+        except jsonschema.ValidationError as exc:
+            # exc를 그대로 문자열화(str(exc))하면 스키마 전문($schema, 모든
+            # required/properties)까지 응답에 포함돼 비대해진다. 실패 사유만
+            # 담은 exc.message만 노출한다.
+            raise HTTPException(status_code=400, detail=f"계약 위반: {exc.message}") from exc
         html = render_report(architecture, pr_delta)
         try:
             _store().save_report(pr_delta, html)
@@ -51,11 +79,11 @@ def create_app() -> FastAPI:
     @app.post("/api/manifest")
     async def manifest(request: Request):
         _check_token(request)
-        doc = await request.json()
+        doc = await _read_json_object(request)
         try:
             validate_architecture(doc)
         except jsonschema.ValidationError as exc:
-            raise HTTPException(status_code=400, detail=f"계약 위반: {exc}") from exc
+            raise HTTPException(status_code=400, detail=f"계약 위반: {exc.message}") from exc
         try:
             _store().save_manifest(doc)
         except ValueError as exc:
