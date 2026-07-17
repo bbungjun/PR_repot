@@ -207,3 +207,78 @@ def test_check_token_rejects_non_ascii_token_directly():
         assert exc_info.value.status_code == 401
     finally:
         os.environ.pop("ARCHMAP_TOKEN", None)
+
+
+# --- Critical 1(재재리뷰): 깊은 중첩 JSON·거대 정수 리터럴이 500으로 유출됨 ---
+#
+# json.JSONDecodeError -> (json.JSONDecodeError, UnicodeDecodeError)로
+# 화이트리스트를 넓혀온 접근이 다시 두 입력에서 뚫렸다:
+#   - 깊게 중첩된 JSON은 파싱 중 RecursionError를 던진다. RecursionError는
+#     RuntimeError의 서브클래스라 ValueError 계열(JSONDecodeError,
+#     UnicodeDecodeError)에 속하지 않아 기존 except에 걸리지 않았다.
+#   - 거대한 정수 리터럴(수천 자리)은 CPython의 정수-문자열 변환 한도
+#     보호장치에 걸려 ValueError를 던지지만, 이 ValueError는
+#     json.JSONDecodeError의 인스턴스가 아닌 자매 클래스(둘 다 ValueError를
+#     상속할 뿐 서로 무관)라 걸리지 않았다.
+# 둘 다 악의적 공격이 아니라 CI 쪽의 단순한 직렬화 루프 버그나 잘못된 숫자
+# 생성으로도 우발적으로 트리거될 수 있는, 평범한 크기(수십 KB)의 입력이다.
+# 이번에는 예외 클래스를 하나 더 추가하는 대신, _read_json_object의 파싱
+# 단계 전체를 감싸는 원칙(모든 파싱 실패는 400)으로 바꿔 근본적으로 막았다.
+
+PATHOLOGICAL_BODIES = {
+    "deep_nesting": b'{"a":' * 10000 + b"1" + b"}" * 10000,
+    "huge_integer_literal": b'{"architecture": ' + b"9" * 5000 + b', "pr_delta": {}}',
+}
+
+
+@pytest.mark.parametrize("body", PATHOLOGICAL_BODIES.values(), ids=PATHOLOGICAL_BODIES.keys())
+def test_pr_report_rejects_pathological_body(client, body):
+    res = client.post("/api/pr-report", content=body, headers=TOKEN)
+    assert res.status_code == 400
+
+
+@pytest.mark.parametrize("body", PATHOLOGICAL_BODIES.values(), ids=PATHOLOGICAL_BODIES.keys())
+def test_manifest_rejects_pathological_body(client, body):
+    res = client.post("/api/manifest", content=body, headers=TOKEN)
+    assert res.status_code == 400
+
+
+# --- 원칙적 수정의 범위 검증: 파싱 이후 단계의 진짜 서버 버그는 여전히 500이어야 한다 ---
+#
+# _read_json_object의 광범위한 except Exception은 "파싱 단계"에만 적용된다.
+# 만약 이 범위를 넓혀 핸들러 전체나 렌더링·저장 단계까지 감쌌다면, render_report의
+# 렌더러 결함이나 Store.save_report의 디스크 오류 같은 진짜 서버 버그까지
+# 400(클라이언트 잘못)으로 위장되어 운영 중 디버깅이 불가능해졌을 것이다.
+# 아래 두 테스트는 그런 예외가 여전히 500으로 보고되는지 확인해, 이번 수정이
+# 파싱 경계에만 좁게 적용됐음을 증명한다.
+
+
+def _raw_client(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARCHMAP_TOKEN", "test-token")
+    monkeypatch.setenv("ARCHMAP_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("ARCHMAP_BASE_URL", "http://testserver")
+    # 기본 TestClient는 핸들러에서 처리되지 않은 예외를 파이썬 예외로 그대로
+    # 재발생시킨다. 실제 500 응답이 만들어지는지 보려면 이를 꺼야 한다.
+    return TestClient(create_app(), raise_server_exceptions=False)
+
+
+def test_render_report_bug_still_returns_500(monkeypatch, tmp_path):
+    def _boom(architecture, pr_delta):
+        raise RuntimeError("렌더러 결함 시뮬레이션")
+
+    monkeypatch.setattr("archmap.api.render_report", _boom)
+    raw_client = _raw_client(monkeypatch, tmp_path)
+    body = {"architecture": _load("architecture_120.json"), "pr_delta": _load("pr_delta_120.json")}
+    res = raw_client.post("/api/pr-report", json=body, headers=TOKEN)
+    assert res.status_code == 500
+
+
+def test_store_save_report_bug_still_returns_500(monkeypatch, tmp_path):
+    def _boom(self, pr_delta, html):
+        raise OSError("디스크 오류 시뮬레이션")
+
+    monkeypatch.setattr("archmap.storage.Store.save_report", _boom)
+    raw_client = _raw_client(monkeypatch, tmp_path)
+    body = {"architecture": _load("architecture_120.json"), "pr_delta": _load("pr_delta_120.json")}
+    res = raw_client.post("/api/pr-report", json=body, headers=TOKEN)
+    assert res.status_code == 500

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import hmac
-import json
 import os
 from pathlib import Path
 
@@ -46,15 +45,25 @@ async def _read_json_object(request: Request) -> dict:
     CI 쪽 버그나 손상된 요청이 잘못된 JSON 구문·빈 바디·비-객체 최상위 값을
     보낼 수 있다. 이런 입력은 서버 결함(500)이 아니라 잘못된 클라이언트
     요청(400)으로 다뤄야 하는 신뢰 경계이므로 여기서 한 번에 검증한다.
+
+    구체적 예외 클래스를 화이트리스트로 나열하는 방식(JSONDecodeError만 →
+    UnicodeDecodeError 추가 → ...)은 이미 두 차례 뚫렸다: 비-UTF8 바디는
+    UnicodeDecodeError를, 깊게 중첩된 JSON은 RecursionError를(RuntimeError의
+    서브클래스라 ValueError 계열이 아님), 거대한 정수 리터럴은 stdlib의 정수
+    문자열 변환 한도에 걸린 ValueError(JSONDecodeError와 남남인 자매 클래스)를
+    던진다. 신뢰할 수 없는 바디를 다루는 이 함수는 "무엇을 잡을지"가 아니라
+    "이 파싱 단계에서 나는 모든 예외는 곧 클라이언트 요청이 잘못됐다는 뜻"이라는
+    원칙으로 접근해야 한다. 그래서 파싱 호출과 타입 확인만 이 좁은 범위 안에서
+    포괄적으로 잡는다(HTTPException은 예외로 다시 던져 401 등을 보존한다).
+    RecursionError를 잡는 경우 파이썬 스택이 이미 거의 소진된 상태일 수
+    있으므로, except 블록 안에서는 문자열 포매팅 외의 무거운 작업을 하지 않는다.
     """
     try:
         body = await request.json()
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        # request.json()은 내부적으로 json.loads(body)를 호출하며, body가
-        # 유효한 UTF-8이 아니면 UnicodeDecodeError를 던진다. 이는
-        # JSONDecodeError의 서브클래스가 아닌 별개 예외(공통 조상은
-        # ValueError)이므로 함께 잡아 400으로 처리한다.
-        raise HTTPException(status_code=400, detail=f"잘못된 JSON입니다: {exc}") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 -- 신뢰 경계 파싱 단계 전체를 400으로 귀결시키는 의도적 설계(위 주석 참고)
+        raise HTTPException(status_code=400, detail="잘못된 JSON입니다") from exc
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="요청 본문은 JSON 객체여야 합니다")
     return body
