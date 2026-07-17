@@ -65,6 +65,36 @@ def test_changed_module_anchor_omitted_without_repo_url():
     assert "autoresearch/action_logs/daily.py" in html  # 경로 텍스트는 그대로 노출
 
 
+# --- Minor: 빈 섹션이 "깨진 리포트"로 보이지 않게 명시적 안내를 표시한다 ------
+
+def test_empty_claims_section_shows_explicit_notice():
+    # 계약 변경이 전혀 없는 PR(모든 claim 소스 리스트가 빔)에서는 섹션이
+    # 텅 비어 "깨진 건가?"로 보이지 않게, 없다는 사실을 명시해야 한다.
+    pr_delta = copy.deepcopy(_load("pr_delta_120.json"))
+    pr_delta["unchanged_contracts"] = []
+    pr_delta["version_changes"] = []
+    pr_delta["schema_changes"] = []
+    pr_delta["cross_repo"] = []
+    pr_delta["breaking_signatures"] = []
+    for m in pr_delta["changed_modules"]:
+        m["public_surface_changed"] = False
+
+    html = render_report(_load("architecture_120.json"), pr_delta)
+
+    assert "이 PR에서 감지된 계약 변경이 없습니다." in html
+    # 없는 사실을 지어내지 않는다 — 실제 변경 모듈 표는 여전히 채워져 있어야 한다.
+    assert "이 PR에서 감지된 변경 모듈이 없습니다." not in html
+
+
+def test_empty_changed_modules_section_shows_explicit_notice():
+    pr_delta = copy.deepcopy(_load("pr_delta_120.json"))
+    pr_delta["changed_modules"] = []
+
+    html = render_report(_load("architecture_120.json"), pr_delta)
+
+    assert "이 PR에서 감지된 변경 모듈이 없습니다." in html
+
+
 def test_warning_badge_renders_for_breaking_change():
     # 원본 pr_delta_120 픽스처는 breaking 변경이 전혀 없어 warning 배지 렌더
     # 경로가 한 번도 검증되지 않는다. version_changes의 breaking 플래그만 뒤집은

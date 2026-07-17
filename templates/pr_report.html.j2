@@ -20,6 +20,7 @@
   .anchor { font-size: .8rem; color: #2d6cdf; text-decoration: none; margin-left: auto; }
   .narration-slot { background: #f4f4f7; color: #777; border: 1px dashed #ccc;
                     border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+  .empty-notice { color: #888; font-style: italic; }
   table { border-collapse: collapse; width: 100%; font-size: .9rem; }
   td, th { border: 1px solid #e5e5ee; padding: .4rem .6rem; text-align: left; }
   .meta { color: #666; font-size: .85rem; }
@@ -44,6 +45,8 @@
   <span>{{ c.text }}</span>
   {% if c.anchor %}<a class="anchor" href="{{ c.anchor }}">⚓ {{ c.anchor_label }}</a>{% endif %}
 </div>
+{% else %}
+<p class="empty-notice">이 PR에서 감지된 계약 변경이 없습니다.</p>
 {% endfor %}
 
 <h2>무엇을 · 변경 모듈</h2>
@@ -56,6 +59,8 @@
   <td>{% for s in m.symbols_changed %}{{ s.name }}({{ s.change }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
   <td>{% if m.anchor %}<a class="anchor" href="{{ m.anchor }}">⚓ {{ m.path }}</a>{% else %}{{ m.path }}{% endif %}</td>
 </tr>
+{% else %}
+<tr><td colspan="5" class="empty-notice">이 PR에서 감지된 변경 모듈이 없습니다.</td></tr>
 {% endfor %}
 </table>
 
