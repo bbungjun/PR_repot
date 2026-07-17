@@ -236,6 +236,19 @@ tests, sidecar_stale.
 
 ---
 
+## 로컬 실행 (Phase 0)
+
+```bash
+uv sync
+ARCHMAP_TOKEN=dev uv run uvicorn archmap.api:app --port 8000   # 수신 API
+uv run streamlit run archmap/ui.py                              # 웹 UI (맵·피드 탭)
+uv run python -m pytest                                         # 테스트
+```
+
+CI 연동 환경변수: `ARCHMAP_TOKEN`(공유 토큰), `ARCHMAP_BASE_URL`(리포트 링크 베이스), `ARCHMAP_DATA_DIR`(저장 위치, 기본 `data/`).
+
+---
+
 ## 11. 다음 세션 재개용 프롬프트 (복붙)
 
 ```
