@@ -54,7 +54,7 @@
   <td>{{ m.id }}</td><td>{{ m.stage }}</td>
   <td>{{ "변경" if m.public_surface_changed else "유지" }}</td>
   <td>{% for s in m.symbols_changed %}{{ s.name }}({{ s.change }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
-  <td><a class="anchor" href="{{ m.anchor }}">⚓ {{ m.path }}</a></td>
+  <td>{% if m.anchor %}<a class="anchor" href="{{ m.anchor }}">⚓ {{ m.path }}</a>{% else %}{{ m.path }}{% endif %}</td>
 </tr>
 {% endfor %}
 </table>

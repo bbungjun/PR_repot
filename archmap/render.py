@@ -3,18 +3,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader, select_autoescape
+from jinja2 import Environment, FileSystemLoader
 
 from archmap.verify import build_claims
 
 _TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
-_env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR),
-                   autoescape=select_autoescape(["html"]))
+# select_autoescape(["html"])는 템플릿 파일명이 ".html"로 끝나는지만 검사한다.
+# 실제 템플릿 파일명은 "pr_report.html.j2"로 ".j2"로 끝나 판정이 항상 False가
+# 되어 autoescape가 꺼진 채로 렌더링되었다(HTML 인젝션 가능). 이 렌더러는
+# HTML 템플릿만 렌더하므로 파일명 판정에 기대지 않고 무조건 켠다.
+_env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR), autoescape=True)
 
 
 def anchor_url(repo_url: str, sha: str, path: str, line: int | None) -> str:
     url = f"{repo_url}/blob/{sha}/{path}"
-    return f"{url}#L{line}" if line else url
+    return f"{url}#L{line}" if line is not None else url
 
 
 def render_report(architecture: dict, pr_delta: dict) -> str:
@@ -34,7 +37,8 @@ def render_report(architecture: dict, pr_delta: dict) -> str:
     changed_modules = []
     for m in pr_delta["changed_modules"]:
         line = next((s.get("line") for s in m["symbols_changed"] if s.get("line")), None)
-        changed_modules.append({**m, "anchor": anchor_url(repo_url, sha, m["path"], line)})
+        anchor = anchor_url(repo_url, sha, m["path"], line) if repo_url else None
+        changed_modules.append({**m, "anchor": anchor})
 
     hit_stages = {m["stage"] for m in pr_delta["changed_modules"]}
     template = _env.get_template("pr_report.html.j2")
