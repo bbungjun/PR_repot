@@ -340,6 +340,20 @@ def test_pr_report_accepts_real_integer_pr(client):
     assert client.get(path).status_code == 200
 
 
+# --- Important: repo_url 스킴 미검증 -> 클릭 가능한 XSS ------------------
+
+def test_manifest_rejects_javascript_scheme_repo_url(client):
+    arch = dict(_load("architecture_120.json"), repo_url="javascript:alert(1)")
+    assert client.post("/api/manifest", json=arch, headers=TOKEN).status_code == 400
+
+
+def test_manifest_accepts_empty_repo_url(client):
+    # 추출기가 --repo-url 미지정 시 빈 문자열을 보내는 기존 경로가 계속 통과해야 한다.
+    arch = dict(_load("architecture_120.json"), repo_url="")
+    res = client.post("/api/manifest", json=arch, headers=TOKEN)
+    assert res.status_code == 200 and res.json() == {"ok": True}
+
+
 def test_store_save_report_bug_still_returns_500(monkeypatch, tmp_path):
     def _boom(self, pr_delta, html):
         raise OSError("디스크 오류 시뮬레이션")

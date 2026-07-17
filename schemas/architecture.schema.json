@@ -6,7 +6,7 @@
   "properties": {
     "schema_version": {"const": "archmap-v0"},
     "repo": {"type": "string"},
-    "repo_url": {"type": "string"},
+    "repo_url": {"type": "string", "pattern": "^(https?://.*)?$"},
     "revision": {"type": "string"},
     "contract_version": {"type": "string"},
     "stages": {"type": "array", "items": {"type": "string"}},
