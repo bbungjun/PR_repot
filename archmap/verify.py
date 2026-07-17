@@ -17,15 +17,21 @@ def _claim(status: str, text: str, module: str | None = None, line: int | None =
 def _test_file_covers(module_id: str, test_files: list[str]) -> bool:
     # 모듈 id의 마지막 구성요소만 대조한다 — 패키지명 대조는 같은 패키지의
     # 무관한 테스트 변경을 "커버됨"으로 오판한다(허위 초록 금지).
-    # 대조는 부분 문자열이 아니라 단어 경계(토큰) 완전 일치로 한다: stem을
-    # "_" 기준으로 토큰화해 mod_name이 그 토큰 중 하나와 정확히 같을 때만
-    # 커버된 것으로 본다. 부분 문자열 대조("log" in "action_logs_daily")는
-    # 짧은 모듈명이 무관한 테스트 파일명에 우연히 포함되는 경우까지 커버됨으로
-    # 오판해 허위 초록을 만든다.
-    mod_name = module_id.rsplit(".", 1)[-1]
+    # 대조는 부분 문자열이 아니라 단어 경계(토큰) 단위로 한다: mod_name과 stem을
+    # 각각 "_" 기준으로 토큰화한 뒤, mod_name의 토큰 리스트가 stem의 토큰 리스트에
+    # "연속된 부분열(contiguous sublist)"로 나타날 때만 커버된 것으로 본다.
+    # 단일 토큰과의 완전 일치 비교(mod_name in stem.split("_"))는 mod_name 자체가
+    # "llm_generator"처럼 언더스코어로 여러 단어를 잇는 경우, 그 문자열이 토큰
+    # 리스트의 원소가 될 수 없어 영원히 매칭에 실패한다(허위 warning 회귀).
+    # 부분 문자열 대조("log" in "action_logs_daily")는 반대로 짧은 모듈명이
+    # 무관한 테스트 파일명에 우연히 포함되는 경우까지 커버됨으로 오판해 허위
+    # 초록을 만든다. 연속 부분열 대조는 두 문제를 모두 피한다.
+    mod_tokens = module_id.rsplit(".", 1)[-1].split("_")
+    n = len(mod_tokens)
     for f in test_files:
         stem = f.rsplit("/", 1)[-1].removeprefix("test_").removesuffix(".py")
-        if mod_name in stem.split("_"):
+        stem_tokens = stem.split("_")
+        if any(stem_tokens[i:i + n] == mod_tokens for i in range(len(stem_tokens) - n + 1)):
             return True
     return False
 
